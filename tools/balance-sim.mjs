@@ -1,12 +1,13 @@
 // Headless balance sim: runs the real game with a greedy, invincible autopilot and reports how many
 // frames the player needs to reach each round's target length (King round: KING_LEN). Growth rate is
 // what food tiers / power-ups / PACE change; survival is left out so the crude autopilot doesn't skew it.
-// Usage: node tools/balance-sim.mjs [runs=20] [maxFrames=20000]
+// Usage: node tools/balance-sim.mjs [runs=20] [maxFrames=20000] [pace]   (pace overrides PACE in game.js)
 import fs from 'node:fs';
 import { loadScript } from '../tests/load.mjs';
 import { installDom } from '../tests/dom-stub.mjs';
 
 const runs = +process.argv[2] || 20, maxFrames = +process.argv[3] || 20000;
+if (process.argv[4]) globalThis.NOODLE_PACE = +process.argv[4];
 const html = fs.readFileSync(new URL('../index.html', import.meta.url), 'utf8');
 const body = html.slice(html.indexOf('<body>') + 6, html.indexOf('<script'));
 const dom = installDom({ html: body });
@@ -40,7 +41,7 @@ function runRound(r) {
   return { frames: maxFrames, reached: false, len: D.state().player.len, target };
 }
 const median = a => { const s = [...a].sort((x, y) => x - y); return s[s.length >> 1]; };
-console.log(`runs=${runs} maxFrames=${maxFrames}`);
+console.log(`runs=${runs} maxFrames=${maxFrames} pace=${globalThis.NOODLE_PACE || 'default'}`);
 console.log('round  target  reached%  median frames to target  median len/1000f');
 for (let r = 0; r < 5; r++) {
   const res = []; for (let i = 0; i < runs; i++) res.push(runRound(r));

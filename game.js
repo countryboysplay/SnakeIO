@@ -32,14 +32,17 @@ const ARENA = 2200, SEG = 6, BASE_SPEED = 2.6, PALETTE = ['#ff5d4a','#5cc8ff','#
 let best = +store.get('noodleBest') || 0; bestEl.textContent = best;
 let eaten = +store.get('noodleEaten') || 0;
 let skinId = store.get('noodleSkin') || 'lime';
+// PACE scales targets, rival sizes and the King so richer food + power-ups don't make rounds shorter
+// (spec §4). window.NOODLE_PACE lets tools/balance-sim.mjs sweep values without editing this file.
+const PACE = window.NOODLE_PACE || 1.5;
 const ROUNDS = [
   {target:40,  rivals:8,  rivalLen:[10,25],  name:'Hatchling'},
   {target:80,  rivals:10, rivalLen:[15,45],  name:'Hunter'},
   {target:130, rivals:12, rivalLen:[20,70],  name:'Predator'},
   {target:200, rivals:14, rivalLen:[30,110], name:'Apex'},
   {target:0,   rivals:10, rivalLen:[30,90],  name:'The Pit King', king:true},
-];
-const KING_LEN = 320;
+].map(r => ({ ...r, target: Math.round(r.target*PACE), rivalLen: r.rivalLen.map(n => Math.round(n*PACE)) }));
+const KING_LEN = Math.round(320*PACE);
 let round = 0, maxRound = +store.get('noodleRound') || 0, king = null;
 const goalEl=document.getElementById('goal'), roundNumEl=document.getElementById('roundNum'), roundNameEl=document.getElementById('roundName');
 function buildRoundPicker(){

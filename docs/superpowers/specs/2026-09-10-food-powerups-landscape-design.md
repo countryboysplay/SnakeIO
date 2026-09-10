@@ -197,13 +197,24 @@ target length (`node tools/balance-sim.mjs 20`). "Frames to clear" was tried
 first and rejected — the autopilot dies too early in rounds 2+ for it to
 measure anything but its own dodging.
 
-| Round | Target (old) | Baseline median frames | len/1000 f | Target (new) | New (PACE=…) | Δ |
-|-------|--------------|------------------------|------------|--------------|--------------|---|
-| 1 | 40 | 2042 | 18.8 | | | |
-| 2 | 80 | 3387 | 22.4 | | | |
-| 3 | 130 | 2949 | 52.0 | | | |
-| 4 | 200 | 3128 | 64.2 | | | |
-| King | 320 | 3083 | 53.0 | | | |
+| Round | Target (old) | Baseline median frames | Food only, PACE 1 | Food + power-ups, PACE 1 | Target (new) | **PACE 1.5** | Δ vs baseline |
+|-------|--------------|------------------------|-------------------|--------------------------|--------------|--------------|---------------|
+| 1 | 40 | 2042 | 1749 | 2236 | 60 | 2079 | +2 % |
+| 2 | 80 | 3387 | 3292 | 3310 | 120 | 2985 | −12 % |
+| 3 | 130 | 2949 | 2447 | 3431 | 195 | 3649 | +24 % |
+| 4 | 200 | 3128 | 2567 | 3710 | 300 | 4069 | +30 % |
+| King | 320 | 3083 | 3777 | 3268 | 480 | 3474 | +13 % |
+
+Sweep (30 runs): PACE 1.2 → 2600 / 2894 / 2588 / 4050 / 2944; PACE 1.3 →
+1824 / 2927 / 3320 / 3622 / 3476; PACE 1.5 as above. Run-to-run noise is
+roughly ±15 %, and rivals scale with PACE (they get eaten by the invincible
+autopilot), so growth time does not scale linearly with target.
+
+**Decision: PACE = 1.5.** Rounds 1–2 and the King stay within the ±15 % band;
+rounds 3–4 run ~25–30 % longer on purpose — the sim measures growth only, and
+the shield/ghost survival buffs (no restarts) make real advancement faster
+than any growth metric shows. Round 1 remains a warm-up. Re-tune after the
+phone play-test if the late rounds feel like a grind.
 
 ## 5. Landscape & controls
 
