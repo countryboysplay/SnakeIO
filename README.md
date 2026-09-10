@@ -35,6 +35,11 @@ After changing any shipped file, bump `CACHE` in `sw.js` (e.g. `noodle-pit-v3`) 
 
 ## Controls
 
-- Joystick (bottom-left): steer
+- Joystick (bottom-left): steer — mouse works on desktop
 - Boost button (bottom-right) or spacebar: speed up, costs length
-- Mouse works on desktop too
+- ⏸ / `P` / `Esc`: pause · 🔊 / `M`: mute (remembered between sessions)
+
+## Development
+
+No build step. Serve the folder (`python -m http.server 8080`) and open `http://localhost:8080/`.
+Unit tests for the service worker, audio and FX modules, plus a headless smoke run of the game: `node --test`.

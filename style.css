@@ -8,6 +8,7 @@
   .hudBtn { pointer-events:auto; width:36px; height:36px; border-radius:18px; border:0; background:rgba(255,255,255,.14); color:var(--paper); font-size:17px; line-height:36px; text-align:center; text-shadow:none; }
   .hudBtn:active { transform:translateY(1px); background:rgba(255,255,255,.22); }
   #hud small { font-weight:500; opacity:.8; font-size:13px; margin-left:6px; }
+  #goal.met { color:var(--lime); opacity:1; }
   #len { display:inline-block; }
   #len.pop { animation: pop .16s ease-out; }
   @keyframes pop { 0%{transform:scale(1)} 40%{transform:scale(1.35)} 100%{transform:scale(1)} }

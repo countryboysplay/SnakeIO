@@ -200,7 +200,7 @@ function reset(){
   const R=ROUNDS[round]; king=null;
   for (let i=0;i<R.rivals;i++) worms.push(mkWorm(false));
   if (R.king){ king = mkWorm(false, KING_LEN); king.c='#ffd23f'; king.skin={c:'#ffd23f',c2:'#7a3e00',type:'bands'}; king.isKing=true; worms.push(king); }
-  goalEl.textContent = R.king ? ' — eat the King' : ' / '+R.target+' and biggest';
+  goalEl.textContent = R.king ? ' — eat the King' : ' / '+R.target+' and biggest'; goalEl.classList.remove('met');
   roundNumEl.textContent = round+1; roundNameEl.textContent = R.name;
   for (let i=0;i<350;i++){ const a=rnd(0,Math.PI*2), r=Math.sqrt(Math.random())*(ARENA-30); mkFood(Math.cos(a)*r, Math.sin(a)*r); }
   lastLen = player.len; lenEl.textContent = player.len;
@@ -281,6 +281,7 @@ function update(){
   }
   // round goal
   const R=ROUNDS[round];
+  goalEl.classList.toggle('met', !R.king && player.len>=R.target);
   if (!player.dead){
     if (R.king){ if (king && king.dead) roundWin(); }
     else if (player.len>=R.target && worms.every(o=>o.dead||o===player||o.len<player.len)) roundWin();
