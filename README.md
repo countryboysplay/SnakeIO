@@ -18,18 +18,28 @@ Once GitHub Pages is on, open the site in Safari on your iPhone, tap Share → *
 
 ## Files
 
-- `index.html` — the whole game
+- `index.html` — page shell and markup
+- `style.css` — all styling
+- `game.js` — the game: loop, worms, AI, rounds, skins, input, screens
+- `audio.js` — synthesized sound effects and music (`Sound`)
+- `fx.js` — particles, screen shake, flashes (`FX`)
 - `sw.js` — service worker that caches the game for offline play
 - `manifest.webmanifest` — makes it installable (fullscreen, portrait, icon)
 - `icon-*.png`, `apple-touch-icon.png` — home-screen icons
+- `.nojekyll` — tells Pages to serve files as-is
+- `tests/` — `node --test` runs the unit tests (not shipped)
 
 ## Shipping an update
 
-After changing `index.html`, bump `CACHE` in `sw.js` (e.g. `noodle-pit-v2`) so installed copies pick up the new version on their next launch.
-- `.nojekyll` — tells Pages to serve files as-is
+After changing any shipped file, bump `CACHE` in `sw.js` (e.g. `noodle-pit-v3`) so installed copies pick up the new version on their next launch.
 
 ## Controls
 
-- Joystick (bottom-left): steer
+- Joystick (bottom-left): steer — mouse works on desktop
 - Boost button (bottom-right) or spacebar: speed up, costs length
-- Mouse works on desktop too
+- ⏸ / `P` / `Esc`: pause · 🔊 / `M`: mute (remembered between sessions)
+
+## Development
+
+No build step. Serve the folder (`python -m http.server 8080`) and open `http://localhost:8080/`.
+Unit tests for the service worker, audio and FX modules, plus a headless smoke run of the game: `node --test`.
