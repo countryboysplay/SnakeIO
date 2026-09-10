@@ -143,10 +143,42 @@ function showOverlay(html){
   const sc = overlay.querySelector('.score'); if (sc) countUp(sc, +sc.dataset.count);
   const b = overlay.querySelector('#start'); if (b) b.onclick = start;
   overlay.classList.add('show');
-  boostBtn.style.display='none';
+  boostBtn.style.display='none'; pauseBtn.hidden = true;
   Sound.music('menu');
 }
-function hideOverlay(){ overlay.classList.remove('show'); boostBtn.style.display='flex'; }
+function hideOverlay(){ overlay.classList.remove('show'); boostBtn.style.display='flex'; pauseBtn.hidden = false; }
+
+// pause: freeze the run without ending it; auto-pause when the tab is hidden
+const pauseBtn = document.getElementById('pause');
+let paused = false;
+function pauseScreen(){
+  return `<h1>Paused<span>Round ${round+1} · ${ROUNDS[round].name}</span></h1>
+  <p>Length ${player.len}</p>
+  <button id="resume">Resume</button>
+  <p><button id="quit" style="background:transparent;color:var(--paper);border:2px solid rgba(255,255,255,.35);margin-top:8px">Quit to menu</button></p>`;
+}
+function pause(){
+  if (!running || paused) return;
+  paused = true; running = false; boosting = false; Sound.boost(false);
+  showOverlay(pauseScreen());
+  overlay.querySelector('#resume').onclick = ()=>{ Sound.play('tap'); resume(); };
+  overlay.querySelector('#quit').onclick = ()=>{ Sound.play('tap'); quitToMenu(); };
+}
+function resume(){
+  if (!paused) return;
+  paused = false; running = true;
+  hideOverlay();
+  Sound.music(ROUNDS[round].king ? 'king' : 'play');
+}
+function quitToMenu(){
+  paused = false; running = false; Sound.boost(false);
+  if (player.len>best){ best=player.len; store.set('noodleBest',best); bestEl.textContent=best; }
+  reset();
+  showOverlay(titleScreen());
+}
+pauseBtn.addEventListener('pointerdown', e=>{ e.preventDefault(); Sound.play('tap'); pause(); });
+addEventListener('keydown', e=>{ if(e.code==='Escape' || e.code==='KeyP'){ if (paused) resume(); else pause(); } });
+document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='hidden' && running) pause(); });
 
 let worms = [], food = [], player, running = false, steer = null, boosting = false, cam = {x:0,y:0}, tick = 0;
 let playerHitWall = false;
@@ -310,7 +342,7 @@ function gameOver(){
   const newly = SKINS.filter(k=>k.need() && !unlockedBefore.has(k.id)); if (newly.length) Sound.play('unlock');
   showOverlay(gameOverScreen(newly));
 }
-function start(){ Sound.play('tap'); unlockedBefore=new Set(SKINS.filter(k=>k.need()).map(k=>k.id)); reset(); running=true; Sound.unlock(); Sound.music(ROUNDS[round].king ? 'king' : 'play'); steer=null; boosting=false; hideOverlay(); }
+function start(){ Sound.play('tap'); unlockedBefore=new Set(SKINS.filter(k=>k.need()).map(k=>k.id)); reset(); paused=false; running=true; Sound.unlock(); Sound.music(ROUNDS[round].king ? 'king' : 'play'); steer=null; boosting=false; hideOverlay(); }
 
 // joystick in bottom-left: direction from stick center to finger
 const stick=document.getElementById('stick'), knob=document.getElementById('knob');

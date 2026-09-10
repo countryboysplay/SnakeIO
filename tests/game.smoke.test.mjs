@@ -70,3 +70,26 @@ test('running the wall kills the player and progress is written to localStorage'
   assert.ok(ov.querySelector('.score'), 'score element present for count-up');
   assert.equal(dom.el('boost').style.display, 'none');
 });
+
+test('pause freezes the run, resume continues it, tab-hide auto-pauses, quit returns to title', () => {
+  dom.el('start').onclick();                       // retry
+  dom.frame(30);
+  const ov = dom.el('overlay'), pauseBtn = dom.el('pause');
+  assert.equal(pauseBtn.hidden, false, 'pause button visible during play');
+  const lenBefore = dom.el('len').textContent;
+  dom.fireWindow('keydown', { code: 'KeyP' });
+  assert.ok(ov.classList.contains('show') && ov.innerHTML.includes('Paused'));
+  assert.equal(pauseBtn.hidden, true);
+  dom.frame(120);
+  assert.equal(dom.el('len').textContent, lenBefore, 'no simulation while paused');
+  dom.el('resume').onclick();
+  assert.equal(ov.classList.contains('show'), false, 'resume hides the overlay');
+  dom.frame(30);
+  document.visibilityState = 'hidden'; dom.fireWindow('visibilitychange'); document.visibilityState = 'visible';
+  assert.ok(ov.innerHTML.includes('Paused'), 'hiding the tab pauses');
+  const eatenBefore = dom.storage.get('noodleEaten');
+  dom.el('quit').onclick();
+  assert.ok(ov.classList.contains('show') && ov.innerHTML.includes('Noodle Pit'), 'quit shows the title screen');
+  assert.equal(dom.storage.get('noodleEaten'), eatenBefore, 'quit is not a death');
+  dom.frame(10);
+});
