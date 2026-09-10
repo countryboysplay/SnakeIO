@@ -38,8 +38,23 @@ After changing any shipped file, bump `CACHE` in `sw.js` (e.g. `noodle-pit-v3`) 
 - Joystick (bottom-left): steer — mouse works on desktop
 - Boost button (bottom-right) or spacebar: speed up, costs length
 - ⏸ / `P` / `Esc`: pause · 🔊 / `M`: mute (remembered between sessions)
+- Plays in portrait or landscape — many people find sideways easier
+
+## Food and power-ups
+
+Food comes in tiers: crumbs (1), berries (3), grubs (5) and rare golden apples (15). Rivals go for the rich stuff too.
+
+Power-ups appear one at a time in the pit and only you can use them:
+
+- ⚡ **Speed** — 6 s at boost speed with no length cost
+- 🛡 **Shield** — survive one fatal hit (you bounce and lose 10% length)
+- 👻 **Ghost** — 5 s passing through other worms (you can't eat them either)
+- 🧲 **Magnet** — 8 s pulling nearby food toward you
+
+Active buffs show as draining pills in the HUD.
 
 ## Development
 
 No build step. Serve the folder (`python -m http.server 8080`) and open `http://localhost:8080/`.
-Unit tests for the service worker, audio and FX modules, plus a headless smoke run of the game: `node --test`.
+Unit tests for the service worker, audio, FX and items modules, plus headless smoke runs of the game (portrait and landscape): `node --test`.
+Balance: `node tools/balance-sim.mjs 20` prints frames-to-target per round for a greedy autopilot; `PACE` in `game.js` scales round targets, rival sizes and the King (`node tools/balance-sim.mjs 20 20000 1.3` sweeps a value). Tuning notes live in `docs/superpowers/specs/2026-09-10-food-powerups-landscape-design.md`.

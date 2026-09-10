@@ -51,8 +51,13 @@
       const t = now();
       recentEats.push(t); while (recentEats.length && recentEats[0] < t - 0.1) recentEats.shift();
       if (recentEats.length > 8) return;
-      osc('sine', 520 + v * 90 + Math.random() * 40, t, 0.09, sfxBus, 0.25, { to: 880 + v * 90 });
+      const q = Math.min(v, 6);   // pitch by tier, but a 15-point apple shouldn't squeal
+      osc('sine', 520 + q * 90 + Math.random() * 40, t, 0.09, sfxBus, 0.25, { to: 880 + q * 90 });
     },
+    apple() { const t = now(); [1047, 1319, 1568].forEach((f, i) => osc('triangle', f, t + i * 0.06, 0.12, sfxBus, 0.25)); },
+    pickup() { const t = now(); osc('sine', 660, t, 0.18, sfxBus, 0.3, { to: 990 }); osc('sine', 880, t + 0.04, 0.18, sfxBus, 0.25, { to: 1320 }); },
+    shieldHit() { const t = now(); noise(t, 0.15, sfxBus, 0.5, 'lowpass', 400); osc('sine', 1320, t + 0.02, 0.4, sfxBus, 0.25); },
+    buffEnd() { osc('sine', 660, now(), 0.2, sfxBus, 0.15, { to: 330 }); },
     eatWorm(len = 20) {
       const t = now(), k = Math.min(1, len / 150);
       osc('sawtooth', 160 - 60 * k, t, 0.12, sfxBus, 0.35 + 0.25 * k, { to: 90 });

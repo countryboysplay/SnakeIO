@@ -55,7 +55,7 @@ function findIn(root, sel) {
   return walk(root);
 }
 
-export function installDom({ html = '' } = {}) {
+export function installDom({ html = '', width = 390, height = 844 } = {}) {
   registry.clear(); rafCb = null;
   const body = makeElement('body'); body.innerHTML = html;
   const storage = new Map();
@@ -73,7 +73,7 @@ export function installDom({ html = '' } = {}) {
   const define = (k, v) => Object.defineProperty(globalThis, k, { value: v, configurable: true, writable: true });
   define('navigator', { standalone: false });
   define('localStorage', { getItem: (k) => storage.has(k) ? storage.get(k) : null, setItem: (k, v) => storage.set(k, String(v)), removeItem: (k) => storage.delete(k), clear: () => storage.clear() });
-  globalThis.innerWidth = 390; globalThis.innerHeight = 844; globalThis.devicePixelRatio = 2;
+  globalThis.innerWidth = width; globalThis.innerHeight = height; globalThis.devicePixelRatio = 2;
   globalThis.matchMedia = () => ({ matches: false });
   globalThis.requestAnimationFrame = (cb) => { (rafCb ||= []).push(cb); return 1; };
   globalThis.addEventListener = (t, fn) => { (winListeners[t] ||= []).push(fn); };
