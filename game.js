@@ -5,6 +5,8 @@ if (matchMedia('(display-mode: standalone)').matches || navigator.standalone){ c
 const cv = document.getElementById('c'); let ctx = cv.getContext('2d');
 function ctxSwap(g){ ctx=g; }
 const lenEl = document.getElementById('len'), bestEl = document.getElementById('best');
+let lastLen = 10;
+function lenPop(){ lenEl.classList.remove('pop'); void lenEl.offsetWidth; lenEl.classList.add('pop'); }
 const overlay = document.getElementById('overlay'), startBtn = document.getElementById('start'), boostBtn = document.getElementById('boost');
 let W, H, DPR;
 function resize(){ DPR = Math.min(devicePixelRatio||1, 1.5); W = innerWidth; H = innerHeight; cv.width = W*DPR; cv.height = H*DPR; ctx.setTransform(DPR,0,0,DPR,0,0); }
@@ -43,13 +45,27 @@ function skinOf(id){ return SKINS.find(k=>k.id===id) || SKINS[0]; }
 function hue(i){ return `hsl(${(i*9)%360},90%,60%)`; }
 // draw a worm: tapered segmented body from tail to head
 function shade(hex,amt){ const n=parseInt(hex.slice(1),16); let r=(n>>16)+amt,g=((n>>8)&255)+amt,b=(n&255)+amt; r=Math.max(0,Math.min(255,r));g=Math.max(0,Math.min(255,g));b=Math.max(0,Math.min(255,b)); return '#'+((r<<16)|(g<<8)|b).toString(16).padStart(6,'0'); }
-function paintBody(pts, r, skin, boost, ang, hx, hy){
+function paintBody(pts, r, skin, boost, ang, hx, hy, squash){
   const n=pts.length; if(n<2) return;
-  if (boost || skin.type==='glow'){ ctx.globalAlpha=.25; ctx.fillStyle=skin.c; for(let i=n-1;i>=0;i-=2){ ctx.beginPath(); ctx.arc(pts[i].x,pts[i].y,r*1.7,0,Math.PI*2); ctx.fill(); } ctx.globalAlpha=1; }
+  if (boost){
+    // speed lines fanning out behind the head
+    const bx = hx - Math.cos(ang)*r*1.5, by = hy - Math.sin(ang)*r*1.5;
+    ctx.strokeStyle = skin.c; ctx.lineWidth = 2;
+    for (let k=0;k<5;k++){
+      const a = ang + Math.PI + (k-2)*0.22 + rnd(-0.05,0.05), L = r*(2+Math.random()*3);
+      ctx.globalAlpha = 0.5*(1-Math.abs(k-2)/3);
+      ctx.beginPath(); ctx.moveTo(bx,by); ctx.lineTo(bx+Math.cos(a)*L, by+Math.sin(a)*L); ctx.stroke();
+    }
+    ctx.globalAlpha = .18 + .1*Math.sin(tick/3);
+    ctx.fillStyle = skin.c; for(let i=n-1;i>=0;i-=2){ ctx.beginPath(); ctx.arc(pts[i].x,pts[i].y,r*1.7,0,Math.PI*2); ctx.fill(); }
+    ctx.globalAlpha = 1;
+  } else if (skin.type==='glow'){
+    ctx.globalAlpha=.25; ctx.fillStyle=skin.c; for(let i=n-1;i>=0;i-=2){ ctx.beginPath(); ctx.arc(pts[i].x,pts[i].y,r*1.7,0,Math.PI*2); ctx.fill(); } ctx.globalAlpha=1;
+  }
   if (skin.type==='glow') ctx.globalAlpha=.85;
   const dark = skin.type==='rainbow' ? null : shade(skin.c,-70);
   for (let i=n-1;i>=0;i--){
-    const t=i/n, ri = r*(0.35+0.65*Math.pow(1-t,0.6)) * (i<3?1.12:1);
+    const t=i/n, ri = r*(0.35+0.65*Math.pow(1-t,0.6)) * (i<3?1.12+0.15*(squash||0):1);
     let col = skin.type==='rainbow' ? hue(i+tick/2) : (skin.type==='bands' && (i>>3)%2 ? skin.c2 : skin.c);
     const p=pts[i];
     // dark underside + body
@@ -83,6 +99,7 @@ function buildSkinPicker(){
   }
 }
 let worms = [], food = [], player, running = false, steer = null, boosting = false, cam = {x:0,y:0}, tick = 0;
+let playerHitWall = false;
 
 function rnd(a,b){ return a + Math.random()*(b-a); }
 function mkFood(x,y,v){ if(food.length>900) return; food.push({x, y, v: v||1, c: PALETTE[Math.random()*PALETTE.length|0], r: 3+(v||1)*1.5}); }
@@ -94,6 +111,7 @@ function mkWorm(isPlayer, len){
   return s;
 }
 function reset(){
+  FX.clear(); playerHitWall = false;
   worms = []; food = [];
   player = mkWorm(true); player.x = 0; player.y = 0; player.pts = player.pts.map((p,i)=>({x:-Math.cos(player.ang)*i*SEG, y:-Math.sin(player.ang)*i*SEG}));
   worms.push(player);
@@ -103,12 +121,23 @@ function reset(){
   goalEl.textContent = R.king ? ' — eat the King' : ' / '+R.target+' and biggest';
   roundNumEl.textContent = round+1; roundNameEl.textContent = R.name;
   for (let i=0;i<350;i++){ const a=rnd(0,Math.PI*2), r=Math.sqrt(Math.random())*(ARENA-30); mkFood(Math.cos(a)*r, Math.sin(a)*r); }
+  lastLen = player.len; lenEl.textContent = player.len;
 }
-function kill(s){
+function kill(s, by){
   s.dead = true;
   for (let i=0;i<s.pts.length;i+=2){ const p=s.pts[i]; mkFood(p.x+rnd(-4,4), p.y+rnd(-4,4), 2); }
-  if (s === player) gameOver();
-  else if (!s.isKing) { setTimeout(()=>{ if(!running) return; const i=worms.indexOf(s); if(i>-1) worms[i]=mkWorm(false); }, 1500); }
+  FX.burst(s.x, s.y, Math.min(24, 12 + (s.len/12|0)), s.c, { speed: 3.5, life: 36, r: 3 });
+  if (s === player){
+    FX.shake(14, 27); FX.flash('rgba(255,93,74,.35)', 3);
+    gameOver();
+  } else {
+    if (by === player){
+      FX.burst(player.x, player.y, 8, '#c9f24a', { speed: 5, life: 20, r: 2 });
+      FX.shake(Math.min(10, 3 + s.len/20), 15); FX.flash('rgba(255,255,255,.18)', 2);
+      if (s.isKing) FX.shake(18, 36);
+    }
+    if (!s.isKing) setTimeout(()=>{ if(!running) return; const i=worms.indexOf(s); if(i>-1) worms[i]=mkWorm(false); }, 1500);
+  }
 }
 function radius(s){ return 5 + Math.min(10, s.len/25); }
 
@@ -140,17 +169,18 @@ function update(){
     }
     let d = target - s.ang; d = Math.atan2(Math.sin(d), Math.cos(d));
     s.ang += Math.max(-0.11, Math.min(0.11, d));
+    s.turn = Math.abs(Math.max(-0.11, Math.min(0.11, d)))/0.11;
     const sp = BASE_SPEED * (s.boost ? 2.2 : 1);
     if (s.boost && tick%10===0 && s.len>6){ s.len--; const t=s.pts[s.pts.length-1]; mkFood(t.x,t.y,1); }
     s.x += Math.cos(s.ang)*sp; s.y += Math.sin(s.ang)*sp;
     // arena wall
-    if (Math.hypot(s.x,s.y) > ARENA){ kill(s); continue; }
+    if (Math.hypot(s.x,s.y) > ARENA){ if (s===player) playerHitWall = true; kill(s, null); continue; }
     s.pts.unshift({x:s.x,y:s.y});
     const maxPts = Math.min(600, Math.floor(s.len * 1.6));
     while (s.pts.length > maxPts) s.pts.pop();
     // eat
     const r = radius(s)+6;
-    for (let i=food.length-1;i>=0;i--){ const f=food[i]; if((f.x-s.x)**2+(f.y-s.y)**2 < r*r){ s.len += f.v; food.splice(i,1); } }
+    for (let i=food.length-1;i>=0;i--){ const f=food[i]; if((f.x-s.x)**2+(f.y-s.y)**2 < r*r){ s.len += f.v; if (s===player) FX.burst(f.x, f.y, 3, f.c, { speed: 1.8, life: 15, r: 1.8 }); food.splice(i,1); } }
   }
   // collisions (head into other body)
   for (const s of worms){
@@ -160,8 +190,8 @@ function update(){
       if (o===s||o.dead) continue;
       const orr = radius(o), rr=(r+orr)*(r+orr);
       for (let i=0;i<o.pts.length;i+=2){ const p=o.pts[i]; if((p.x-s.x)**2+(p.y-s.y)**2<rr){
-        if (s.len < o.len) kill(s);                       // ran into something bigger: you're done
-        else { s.len += Math.ceil(o.len/2); if(s===player){ eaten++; store.set('noodleEaten',eaten); } kill(o); }   // bit something smaller: you eat it
+        if (s.len < o.len) kill(s, o);                    // ran into something bigger: you're done
+        else { s.len += Math.ceil(o.len/2); if(s===player){ eaten++; store.set('noodleEaten',eaten); } kill(o, s); }   // bit something smaller: you eat it
         break; } }
       if (s.dead) break;
     }
@@ -172,13 +202,15 @@ function update(){
     if (R.king){ if (king && king.dead) roundWin(); }
     else if (player.len>=R.target && worms.every(o=>o.dead||o===player||o.len<player.len)) roundWin();
   }
-  cam.x += (player.x-cam.x)*0.12; cam.y += (player.y-cam.y)*0.12;
-  lenEl.textContent = player.len;
+  const camK = player.boost ? 0.18 : 0.12;
+  cam.x += (player.x-cam.x)*camK; cam.y += (player.y-cam.y)*camK;
+  FX.update();
+  if (player.len !== lastLen){ if (player.len > lastLen) lenPop(); lastLen = player.len; lenEl.textContent = player.len; }
 }
 
 function draw(){
   ctx.fillStyle = '#1b1330'; ctx.fillRect(0,0,W,H);
-  ctx.save(); ctx.translate(W/2-cam.x, H/2-cam.y);
+  const sh = FX.shakeOffset(); ctx.save(); ctx.translate(W/2-cam.x+sh.x, H/2-cam.y+sh.y);
   // soft soil vignette
   const vg=ctx.createRadialGradient(cam.x,cam.y,0,cam.x,cam.y,Math.max(W,H)*.7); vg.addColorStop(0,'#2b2040'); vg.addColorStop(1,'#1b1330');
   ctx.fillStyle=vg; ctx.fillRect(cam.x-W/2,cam.y-H/2,W,H);
@@ -186,29 +218,35 @@ function draw(){
   ctx.strokeStyle='#ff5d4a'; ctx.lineWidth=6; ctx.beginPath(); ctx.arc(0,0,ARENA,0,Math.PI*2); ctx.stroke();
   // food
   for (const f of food){ if(Math.abs(f.x-cam.x)>W/2+20||Math.abs(f.y-cam.y)>H/2+20) continue; ctx.fillStyle=f.c; ctx.beginPath(); ctx.arc(f.x,f.y,f.r,0,Math.PI*2); ctx.fill(); }
+  FX.drawWorld(ctx);
   // worms
   for (const s of worms){
     if (s.dead) continue;
     const r = radius(s);
     if (s!==player && s.pts.every(p=>Math.abs(p.x-cam.x)>W/2+40||Math.abs(p.y-cam.y)>H/2+40)) continue;
-    paintBody(s.pts, r, s.skin || {c:s.c,type:'solid'}, s.boost, s.ang, s.x, s.y);
+    paintBody(s.pts, r, s.skin || {c:s.c,type:'solid'}, s.boost, s.ang, s.x, s.y, s.turn);
     // eyes
     const ex=Math.cos(s.ang+Math.PI/2)*r*.5, ey=Math.sin(s.ang+Math.PI/2)*r*.5, fx=Math.cos(s.ang)*r*.35, fy=Math.sin(s.ang)*r*.35;
     ctx.fillStyle='#fff';
     ctx.beginPath(); ctx.arc(s.x+ex+fx,s.y+ey+fy,r*.34,0,Math.PI*2); ctx.arc(s.x-ex+fx,s.y-ey+fy,r*.34,0,Math.PI*2); ctx.fill();
     ctx.fillStyle='rgba(255,255,255,.85)'; ctx.font='bold 12px sans-serif'; ctx.textAlign='center'; ctx.fillText((s.isKing?'👑 ':'')+s.len, s.x, s.y-r-6);
+    let look = 0; if (s===player && steer!=null){ let d=steer-s.ang; d=Math.atan2(Math.sin(d),Math.cos(d)); look = Math.max(-1,Math.min(1,d/1.2)); }
+    const px = Math.cos(s.ang+look*0.6)*r*.1, py = Math.sin(s.ang+look*0.6)*r*.1;
     ctx.fillStyle='#1b1330';
-    ctx.beginPath(); ctx.arc(s.x+ex+fx*1.6,s.y+ey+fy*1.6,r*.17,0,Math.PI*2); ctx.arc(s.x-ex+fx*1.6,s.y-ey+fy*1.6,r*.17,0,Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(s.x+ex+fx*1.6+px,s.y+ey+fy*1.6+py,r*.17,0,Math.PI*2); ctx.arc(s.x-ex+fx*1.6+px,s.y-ey+fy*1.6+py,r*.17,0,Math.PI*2); ctx.fill();
   }
   ctx.restore();
+  FX.drawScreen(ctx, W, H);
   if (running && player.boost){ ctx.fillStyle='rgba(255,93,74,.9)'; ctx.font='bold 16px sans-serif'; ctx.textAlign='center'; ctx.fillText('BOOSTING', W/2, H-40); }
   // steering indicator
 }
 
-function loop(){ if(running) update(); draw(); requestAnimationFrame(loop); }
+function loop(){ if(running) update(); else FX.update(); draw(); requestAnimationFrame(loop); }
 let unlockedBefore=new Set();
 function roundWin(){
   running=false;
+  FX.flash('rgba(201,242,74,.30)', 3);
+  FX.confetti(W/2, H*0.45, 60, PALETTE);
   if (player.len>best){ best=player.len; store.set('noodleBest',best); bestEl.textContent=best; }
   const R=ROUNDS[round], last = round===ROUNDS.length-1;
   if (!last){ maxRound=Math.max(maxRound, round+1); store.set('noodleRound',maxRound); round++; }

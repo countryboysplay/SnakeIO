@@ -6,6 +6,9 @@
   #hud { gap:12px; }
   #hud > div { white-space:nowrap; }
   #hud small { font-weight:500; opacity:.8; font-size:13px; margin-left:6px; }
+  #len { display:inline-block; }
+  #len.pop { animation: pop .16s ease-out; }
+  @keyframes pop { 0%{transform:scale(1)} 40%{transform:scale(1.35)} 100%{transform:scale(1)} }
   #boost { position:fixed; z-index:5; touch-action:none; right:22px; bottom:calc(28px + env(safe-area-inset-bottom, 0)); width:78px; height:78px; border-radius:50%; background:var(--coral); color:var(--ink); font-weight:800; font-size:15px; border:0; box-shadow:0 6px 0 #b8362a; display:none; align-items:center; justify-content:center; user-select:none; }
   #stick { position:fixed; left:22px; bottom:calc(22px + env(safe-area-inset-bottom, 0)); width:150px; height:150px; border-radius:50%; background:rgba(255,255,255,.12); border:3px solid rgba(255,255,255,.35); z-index:5; }
   #knob { position:absolute; left:50%; top:50%; width:64px; height:64px; margin:-32px 0 0 -32px; border-radius:50%; background:var(--sky); box-shadow:0 4px 0 #2a7fb0; pointer-events:none; }
