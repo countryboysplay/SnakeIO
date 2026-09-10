@@ -16,10 +16,14 @@ loadScript('game.js');
 test('boots to the title screen and renders idle frames without errors', () => {
   dom.frame(30);
   assert.ok(dom.el('start'), 'a Play button should exist');
+  assert.ok(dom.el('overlay').classList.contains('show'), 'title overlay should be shown');
+  assert.ok(dom.el('overlay').innerHTML.includes('Add to Home Screen'), 'install hint shows outside standalone mode');
 });
 
 test('starts a round, steers and boosts through several seconds of play', () => {
   dom.el('start').onclick();
+  assert.equal(dom.el('overlay').classList.contains('show'), false, 'overlay hides when a round starts');
+  assert.equal(dom.el('boost').style.display, 'flex');
   dom.frame(60);
   const stick = dom.el('stick');
   stick.dispatch('mousedown', { clientX: 140, clientY: 720 });   // push the joystick right
@@ -60,4 +64,9 @@ test('running the wall kills the player and progress is written to localStorage'
   dom.fireWindow('keyup', { code: 'Space' });
   dom.fireWindow('mouseup', {});
   assert.ok(dom.storage.has('noodleBest') || dom.storage.has('noodleEaten'), 'gameOver should persist best/eaten');
+  const ov = dom.el('overlay');
+  assert.ok(ov.classList.contains('show'), 'game-over overlay is shown');
+  assert.ok(ov.innerHTML.includes('Eaten') && ov.innerHTML.includes('Retry round'), 'game-over template rendered');
+  assert.ok(ov.querySelector('.score'), 'score element present for count-up');
+  assert.equal(dom.el('boost').style.display, 'none');
 });

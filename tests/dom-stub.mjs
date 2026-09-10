@@ -75,13 +75,13 @@ export function installDom({ html = '' } = {}) {
   define('localStorage', { getItem: (k) => storage.has(k) ? storage.get(k) : null, setItem: (k, v) => storage.set(k, String(v)), removeItem: (k) => storage.delete(k), clear: () => storage.clear() });
   globalThis.innerWidth = 390; globalThis.innerHeight = 844; globalThis.devicePixelRatio = 2;
   globalThis.matchMedia = () => ({ matches: false });
-  globalThis.requestAnimationFrame = (cb) => { rafCb = cb; return 1; };
+  globalThis.requestAnimationFrame = (cb) => { (rafCb ||= []).push(cb); return 1; };
   globalThis.addEventListener = (t, fn) => { (winListeners[t] ||= []).push(fn); };
   globalThis.removeEventListener = (t, fn) => { winListeners[t] = (winListeners[t] || []).filter(f => f !== fn); };
   return {
     registry, storage, body,
     el: (id) => registry.get(id),
     fireWindow: (t, ev = {}) => { ev.preventDefault ||= noop; for (const f of winListeners[t] || []) f(ev); },
-    frame: (n = 1) => { for (let i = 0; i < n; i++) { const cb = rafCb; rafCb = null; if (!cb) throw new Error('no rAF callback pending'); cb(performance.now()); } },
+    frame: (n = 1) => { for (let i = 0; i < n; i++) { const cbs = rafCb; rafCb = null; if (!cbs) throw new Error('no rAF callback pending'); for (const cb of cbs) cb(performance.now()); } },
   };
 }

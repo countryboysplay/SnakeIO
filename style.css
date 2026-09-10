@@ -15,7 +15,14 @@
   #stick { position:fixed; left:22px; bottom:calc(22px + env(safe-area-inset-bottom, 0)); width:150px; height:150px; border-radius:50%; background:rgba(255,255,255,.12); border:3px solid rgba(255,255,255,.35); z-index:5; }
   #knob { position:absolute; left:50%; top:50%; width:64px; height:64px; margin:-32px 0 0 -32px; border-radius:50%; background:var(--sky); box-shadow:0 4px 0 #2a7fb0; pointer-events:none; }
   #boost.on { transform:translateY(4px); box-shadow:0 2px 0 #b8362a; }
-  #overlay { position:fixed; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; padding:24px; background:rgba(27,19,48,.88); }
+  #overlay { position:fixed; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; padding:24px; background:rgba(27,19,48,.88); opacity:0; transform:scale(.96); pointer-events:none; transition:opacity .25s ease, transform .25s ease; }
+  #overlay.show { opacity:1; transform:none; pointer-events:auto; }
+  #overlay .score { animation: scoreIn .4s cubic-bezier(.2,.9,.3,1.2); }
+  @keyframes scoreIn { from{transform:scale(.4); opacity:0} to{transform:none; opacity:1} }
+  #overlay .sub { font-size:13px; opacity:.7; margin:-14px 0 24px; max-width:300px; line-height:1.4; }
+  #overlay button:active, .rd:active, .sk:active { transform:translateY(1px); }
+  .rd.sel, .sk.sel { box-shadow:0 0 0 3px rgba(201,242,74,.35), 0 0 18px rgba(201,242,74,.35); }
+  .sk.lock::after { content:'🔒'; position:absolute; right:-6px; top:-6px; font-size:14px; filter:drop-shadow(0 1px 2px rgba(0,0,0,.6)); }
   #overlay h1 { font-size:56px; letter-spacing:-2px; line-height:.95; color:var(--lime); }
   #overlay h1 span { display:block; color:var(--paper); font-size:22px; letter-spacing:0; font-weight:500; margin-top:10px; }
   #overlay p { margin:22px 0 28px; max-width:300px; line-height:1.45; opacity:.9; }
@@ -32,4 +39,3 @@
   .rd { width:44px; height:44px; border-radius:12px; border:0; background:#2a2044; color:var(--paper); font-weight:800; font-size:16px; }
   .rd.sel { background:var(--sky); color:var(--ink); }
   .rd.lock { opacity:.35; }
-  .hidden { display:none !important; }

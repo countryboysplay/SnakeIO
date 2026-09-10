@@ -10,13 +10,13 @@ addEventListener('pointerdown', unlockOnce); addEventListener('touchstart', unlo
 addEventListener('keydown', e=>{ if(e.code==='KeyM') setMuted(!Sound.muted); });
 document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='visible') Sound.unlock(); });
 addEventListener('error', e=>{ const d=document.createElement('div'); d.style.cssText='position:fixed;top:60px;left:10px;right:10px;background:#900;color:#fff;padding:10px;font:12px monospace;z-index:99;white-space:pre-wrap'; d.textContent='Error: '+e.message+' @'+e.lineno; document.body.appendChild(d); });
-if (matchMedia('(display-mode: standalone)').matches || navigator.standalone){ const h=document.getElementById('installHint'); if(h) h.remove(); }
+const standalone = matchMedia('(display-mode: standalone)').matches || navigator.standalone;
 const cv = document.getElementById('c'); let ctx = cv.getContext('2d');
 function ctxSwap(g){ ctx=g; }
 const lenEl = document.getElementById('len'), bestEl = document.getElementById('best');
 let lastLen = 10;
 function lenPop(){ lenEl.classList.remove('pop'); void lenEl.offsetWidth; lenEl.classList.add('pop'); }
-const overlay = document.getElementById('overlay'), startBtn = document.getElementById('start'), boostBtn = document.getElementById('boost');
+const overlay = document.getElementById('overlay'), boostBtn = document.getElementById('boost');
 let W, H, DPR;
 function resize(){ DPR = Math.min(devicePixelRatio||1, 1.5); W = innerWidth; H = innerHeight; cv.width = W*DPR; cv.height = H*DPR; ctx.setTransform(DPR,0,0,DPR,0,0); }
 addEventListener('resize', resize); resize();
@@ -107,6 +107,47 @@ function buildSkinPicker(){
     box.appendChild(d);
   }
 }
+// overlay screens — one template per screen, one place that shows/hides
+function titleScreen(){
+  return `<h1>Noodle Pit<span>eat, grow, don't get bonked</span></h1>
+  <div id="rounds"></div><div id="skins"></div>
+  <p>Grow to each round's target as the biggest worm in the pit, then eat the Pit King.</p>
+  <p class="sub">Joystick steers · hold BOOST to speed up (costs length) · bump smaller worms to eat them</p>
+  <button id="start">Play</button>
+  ${standalone ? '' : '<p class="sub" style="margin-top:18px">To install: tap Share, then Add to Home Screen.</p>'}`;
+}
+function roundClearScreen(){
+  const prev = ROUNDS[round-1], next = ROUNDS[round];
+  return `<h1>Round cleared<span>${prev.name} → ${next.name}</span></h1><div class="score" data-count="${player.len}">0</div>
+  <p>${next.king ? 'Final round: the Pit King is waiting. He\'s length '+KING_LEN+' — outgrow him, then eat him.' : 'Next: reach length '+next.target+' as the biggest worm. Rivals start bigger.'}</p>
+  <div id="skins"></div><button id="start">Next round</button>`;
+}
+function winScreen(){
+  return `<h1>You rule the pit<span>the King is eaten</span></h1><div class="score" data-count="${player.len}">0</div>
+  <p>Every round cleared. The pit is yours — keep playing to chase a new best and finish the skins.</p>
+  <div id="skins"></div><button id="start">Play again</button>`;
+}
+function gameOverScreen(newly){
+  return `<h1>Eaten<span>you grew to</span></h1><div class="score" data-count="${player.len}">0</div>
+  <p>Best ${best} · worms eaten ${eaten}${newly.length?`<br><b style="color:var(--lime)">New skin unlocked: ${newly.map(k=>k.name).join(', ')}</b>`:''}</p>
+  <div id="rounds"></div><div id="skins"></div><button id="start">Retry round ${round+1}</button>`;
+}
+function countUp(el, to){
+  const t0 = performance.now(), dur = 400;
+  const f = ()=>{ const k = Math.min(1,(performance.now()-t0)/dur); el.textContent = Math.round(to*(1-Math.pow(1-k,3))); if (k<1) requestAnimationFrame(f); };
+  f();
+}
+function showOverlay(html){
+  overlay.innerHTML = html;
+  buildRoundPicker(); buildSkinPicker();
+  const sc = overlay.querySelector('.score'); if (sc) countUp(sc, +sc.dataset.count);
+  const b = overlay.querySelector('#start'); if (b) b.onclick = start;
+  overlay.classList.add('show');
+  boostBtn.style.display='none';
+  Sound.music('menu');
+}
+function hideOverlay(){ overlay.classList.remove('show'); boostBtn.style.display='flex'; }
+
 let worms = [], food = [], player, running = false, steer = null, boosting = false, cam = {x:0,y:0}, tick = 0;
 let playerHitWall = false;
 
@@ -254,29 +295,22 @@ function draw(){
 function loop(){ if(running) update(); else FX.update(); draw(); requestAnimationFrame(loop); }
 let unlockedBefore=new Set();
 function roundWin(){
-  running=false; Sound.boost(false); Sound.music('menu'); Sound.play('roundWin');
+  running=false; Sound.boost(false); Sound.play('roundWin');
   FX.flash('rgba(201,242,74,.30)', 3);
   FX.confetti(W/2, H*0.45, 60, PALETTE);
   if (player.len>best){ best=player.len; store.set('noodleBest',best); bestEl.textContent=best; }
   const newly = SKINS.filter(k=>k.need() && !unlockedBefore.has(k.id)); if (newly.length) Sound.play('unlock');
   const R=ROUNDS[round], last = round===ROUNDS.length-1;
   if (!last){ maxRound=Math.max(maxRound, round+1); store.set('noodleRound',maxRound); round++; }
-  overlay.innerHTML = last
-    ? `<h1>You rule the pit<span>the King is eaten</span></h1><div class="score">${player.len}</div><p>Every round cleared. The pit is yours — keep playing to chase a new best and finish the skins.</p><div id="skins"></div><button id="start">Play again</button>`
-    : `<h1>Round cleared<span>${R.name} → ${ROUNDS[round].name}</span></h1><div class="score">${player.len}</div><p>${ROUNDS[round].king ? 'Final round: the Pit King is waiting. He\'s length '+KING_LEN+' — outgrow him, then eat him.' : 'Next: reach length '+ROUNDS[round].target+' as the biggest worm. Rivals start bigger.'}</p><div id="skins"></div><button id="start">Next round</button>`;
-  overlay.classList.remove('hidden'); buildSkinPicker(); document.getElementById('start').onclick=start;
+  showOverlay(last ? winScreen() : roundClearScreen());
 }
 function gameOver(){
-  running=false; boostBtn.style.display='none'; Sound.boost(false); Sound.music('menu'); Sound.play(playerHitWall ? 'wall' : 'death');
+  running=false; Sound.boost(false); Sound.play(playerHitWall ? 'wall' : 'death');
   if (player.len>best){ best=player.len; store.set('noodleBest',best); bestEl.textContent=best; }
   const newly = SKINS.filter(k=>k.need() && !unlockedBefore.has(k.id)); if (newly.length) Sound.play('unlock');
-  overlay.innerHTML = `<h1>Eaten<span>you grew to</span></h1><div class="score">${player.len}</div><p>Best ${best} · worms eaten ${eaten}${newly.length?`<br><b style="color:var(--lime)">New skin unlocked: ${newly.map(k=>k.name).join(', ')}</b>`:''}</p><div id="rounds"></div><div id="skins"></div><button id="start">Retry round ${round+1}</button>`;
-  buildRoundPicker(); buildSkinPicker();
-  overlay.classList.remove('hidden');
-  document.getElementById('start').onclick = start;
+  showOverlay(gameOverScreen(newly));
 }
-function start(){ Sound.play('tap'); unlockedBefore=new Set(SKINS.filter(k=>k.need()).map(k=>k.id)); reset(); running=true; Sound.unlock(); Sound.music(ROUNDS[round].king ? 'king' : 'play'); steer=null; boosting=false; overlay.classList.add('hidden'); boostBtn.style.display='flex'; }
-startBtn.onclick = start;
+function start(){ Sound.play('tap'); unlockedBefore=new Set(SKINS.filter(k=>k.need()).map(k=>k.id)); reset(); running=true; Sound.unlock(); Sound.music(ROUNDS[round].king ? 'king' : 'play'); steer=null; boosting=false; hideOverlay(); }
 
 // joystick in bottom-left: direction from stick center to finger
 const stick=document.getElementById('stick'), knob=document.getElementById('knob');
@@ -296,6 +330,6 @@ boostBtn.addEventListener('touchstart', bOn, {passive:false});
 boostBtn.addEventListener('pointerdown', bOn); boostBtn.addEventListener('pointerup', bOff); boostBtn.addEventListener('pointercancel', bOff); boostBtn.addEventListener('pointerleave', bOff);
 addEventListener('keydown', e=>{ if(e.code==='Space') boosting=true; }); addEventListener('keyup', e=>{ if(e.code==='Space') boosting=false; });
 
-reset(); buildRoundPicker(); buildSkinPicker(); Sound.music('menu'); loop();
+reset(); showOverlay(titleScreen()); loop();
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(()=>{});
 })();
