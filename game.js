@@ -189,7 +189,17 @@ let worms = [], food = [], player, running = false, steer = null, boosting = fal
 let playerHitWall = false, godMode = false;
 
 function rnd(a,b){ return a + Math.random()*(b-a); }
-function mkFood(x,y,v){ if(food.length>900) return; food.push({x, y, v: v||1, c: PALETTE[Math.random()*PALETTE.length|0], r: 3+(v||1)*1.5}); }
+// food comes in tiers (Items.FOOD); crumbs keep the palette colours, the rest have a fixed look
+const FOOD_COLORS = { berry:'#c9457f', grub:'#f3e6a2', apple:'#ffd23f' };
+let appleCount = 0;
+function mkFood(x,y,kind,color){
+  if(food.length>900) return;
+  kind = kind || 'crumb'; const k = Items.FOOD[kind];
+  if (kind==='apple') appleCount++;
+  food.push({ x, y, kind, v: k.v, r: k.r, c: color || FOOD_COLORS[kind] || PALETTE[Math.random()*PALETTE.length|0], ph: Math.random()*Math.PI*2 });
+}
+function spawnFood(){ const a=rnd(0,Math.PI*2), r=Math.sqrt(Math.random())*(ARENA-30); mkFood(Math.cos(a)*r, Math.sin(a)*r, Items.pickFood(Math.random, appleCount)); }
+function eatFood(i){ const f=food[i]; if (f.kind==='apple') appleCount--; food.splice(i,1); return f; }
 function mkWorm(isPlayer, len){
   const a = rnd(0, Math.PI*2), r = rnd(200, ARENA-200);
   const R=ROUNDS[round]; if(len==null) len = isPlayer ? 10 : Math.round(rnd(R.rivalLen[0],R.rivalLen[1]));
@@ -199,7 +209,7 @@ function mkWorm(isPlayer, len){
 }
 function reset(){
   FX.clear(); playerHitWall = false;
-  worms = []; food = [];
+  worms = []; food = []; appleCount = 0;
   player = mkWorm(true); player.x = 0; player.y = 0; player.pts = player.pts.map((p,i)=>({x:-Math.cos(player.ang)*i*SEG, y:-Math.sin(player.ang)*i*SEG}));
   worms.push(player);
   const R=ROUNDS[round]; king=null;
@@ -207,13 +217,13 @@ function reset(){
   if (R.king){ king = mkWorm(false, KING_LEN); king.c='#ffd23f'; king.skin={c:'#ffd23f',c2:'#7a3e00',type:'bands'}; king.isKing=true; worms.push(king); }
   goalEl.textContent = R.king ? ' — eat the King' : ' / '+R.target+' and biggest'; goalEl.classList.remove('met');
   roundNumEl.textContent = round+1; roundNameEl.textContent = R.name;
-  for (let i=0;i<350;i++){ const a=rnd(0,Math.PI*2), r=Math.sqrt(Math.random())*(ARENA-30); mkFood(Math.cos(a)*r, Math.sin(a)*r); }
+  for (let i=0;i<260;i++) spawnFood();
   lastLen = player.len; lenEl.textContent = player.len;
 }
 function kill(s, by){
   if (s===player && godMode){ playerHitWall = false; const d=Math.hypot(s.x,s.y); if (d>ARENA-20){ s.x*=(ARENA-20)/d; s.y*=(ARENA-20)/d; } return; }
   s.dead = true;
-  for (let i=0;i<s.pts.length;i+=2){ const p=s.pts[i]; mkFood(p.x+rnd(-4,4), p.y+rnd(-4,4), 2); }
+  for (let i=0;i<s.pts.length;i+=2){ const p=s.pts[i]; mkFood(p.x+rnd(-4,4), p.y+rnd(-4,4), 'chunk', s.c); }
   FX.burst(s.x, s.y, Math.min(24, 12 + (s.len/12|0)), s.c, { speed: 3.5, life: 36, r: 3 });
   if (s === player){
     FX.shake(14, 27); FX.flash('rgba(255,93,74,.35)', 3);
@@ -233,15 +243,15 @@ function update(){
   tick++;
   for (let i=0;i<worms.length;i++){ const s=worms[i]; if (s.dead && s.respawnAt!=null && tick>=s.respawnAt) worms[i]=mkWorm(false); }
   // spawn food to keep arena stocked
-  if (food.length < 380 && tick%4===0){ const a=rnd(0,Math.PI*2), r=Math.sqrt(Math.random())*(ARENA-30); mkFood(Math.cos(a)*r, Math.sin(a)*r); }
+  if (food.length < 280 && tick%4===0) spawnFood();
   for (const s of worms){
     if (s.dead) continue;
     let target;
     if (s.ai){
       s.turnT--;
-      // nearest food + avoid other worms' bodies ahead
-      let bestD=1e9, f=null;
-      for (let i=0;i<food.length;i+=3){ const d=(food[i].x-s.x)**2+(food[i].y-s.y)**2; if(d<bestD){bestD=d;f=food[i];} }
+      // richest-nearest food (distance² / value) + avoid other worms' bodies ahead
+      let bestD=1e18, f=null;
+      for (let i=0;i<food.length;i+=3){ const d=((food[i].x-s.x)**2+(food[i].y-s.y)**2)/food[i].v; if(d<bestD){bestD=d;f=food[i];} }
       target = f ? Math.atan2(f.y-s.y, f.x-s.x) : s.ang;
       if (Math.hypot(s.x,s.y) > ARENA-150) target = Math.atan2(-s.y,-s.x);
       const lx = s.x+Math.cos(s.ang)*60, ly = s.y+Math.sin(s.ang)*60;
@@ -261,7 +271,7 @@ function update(){
     s.ang += Math.max(-0.11, Math.min(0.11, d));
     s.turn = Math.abs(Math.max(-0.11, Math.min(0.11, d)))/0.11;
     const sp = BASE_SPEED * (s.boost ? 2.2 : 1);
-    if (s.boost && tick%10===0 && s.len>6){ s.len--; const t=s.pts[s.pts.length-1]; mkFood(t.x,t.y,1); }
+    if (s.boost && tick%10===0 && s.len>6){ s.len--; const t=s.pts[s.pts.length-1]; mkFood(t.x,t.y,'crumb'); }
     s.x += Math.cos(s.ang)*sp; s.y += Math.sin(s.ang)*sp;
     // arena wall
     if (Math.hypot(s.x,s.y) > ARENA){ if (s===player) playerHitWall = true; kill(s, null); continue; }
@@ -270,7 +280,7 @@ function update(){
     while (s.pts.length > maxPts) s.pts.pop();
     // eat
     const r = radius(s)+6;
-    for (let i=food.length-1;i>=0;i--){ const f=food[i]; if((f.x-s.x)**2+(f.y-s.y)**2 < r*r){ s.len += f.v; if (s===player){ FX.burst(f.x, f.y, 3, f.c, { speed: 1.8, life: 15, r: 1.8 }); Sound.play('eat', f.v); } food.splice(i,1); } }
+    for (let i=food.length-1;i>=0;i--){ const f=food[i]; if((f.x-s.x)**2+(f.y-s.y)**2 < r*r){ s.len += f.v; if (s===player){ FX.burst(f.x, f.y, 3 + (f.v/2|0), f.c, { speed: 1.8 + f.v*0.15, life: 15, r: 1.8 }); Sound.play('eat', f.v); if (f.kind==='apple') Sound.play('apple'); } eatFood(i); } }
   }
   // collisions (head into other body)
   for (const s of worms){
@@ -299,6 +309,29 @@ function update(){
   if (player.len !== lastLen){ if (player.len > lastLen) lenPop(); lastLen = player.len; lenEl.textContent = player.len; }
 }
 
+function drawFood(f){
+  switch (f.kind){
+    case 'berry':
+      ctx.fillStyle=f.c; ctx.beginPath(); ctx.arc(f.x,f.y,f.r,0,Math.PI*2); ctx.fill();
+      ctx.strokeStyle='#ff8fc2'; ctx.lineWidth=1.5; ctx.beginPath(); ctx.arc(f.x-f.r*.2,f.y-f.r*.2,f.r*.55,Math.PI*1.1,Math.PI*1.7); ctx.stroke();
+      ctx.strokeStyle='#4a7a2a'; ctx.lineWidth=2; ctx.beginPath(); ctx.moveTo(f.x,f.y-f.r); ctx.lineTo(f.x+2,f.y-f.r-4); ctx.stroke();
+      break;
+    case 'grub': {
+      const a=Math.sin(tick/8+f.ph)*0.6, dx=Math.cos(a)*f.r*.7, dy=Math.sin(a)*f.r*.7;
+      ctx.fillStyle=f.c; for (let k=-1;k<=1;k++){ ctx.beginPath(); ctx.arc(f.x+dx*k,f.y+dy*k,f.r*(k?.75:.85),0,Math.PI*2); ctx.fill(); }
+      ctx.strokeStyle='rgba(120,90,20,.5)'; ctx.lineWidth=1.5; for (const k of [-0.5,0.5]){ ctx.beginPath(); ctx.arc(f.x+dx*k,f.y+dy*k,f.r*.7,0,Math.PI*2); ctx.stroke(); }
+      break; }
+    case 'apple': {
+      ctx.globalAlpha=.25; ctx.fillStyle=f.c; ctx.beginPath(); ctx.arc(f.x,f.y,f.r*2.2+Math.sin(tick/5+f.ph)*1.5,0,Math.PI*2); ctx.fill(); ctx.globalAlpha=1;
+      ctx.fillStyle=f.c; ctx.beginPath(); ctx.arc(f.x,f.y,f.r,0,Math.PI*2); ctx.fill();
+      ctx.fillStyle='rgba(255,255,255,.5)'; ctx.beginPath(); ctx.arc(f.x-f.r*.3,f.y-f.r*.3,f.r*.3,0,Math.PI*2); ctx.fill();
+      const sa=tick/40+f.ph, sx=f.x+f.r*1.3, sy=f.y-f.r*1.3; ctx.strokeStyle='#fff'; ctx.lineWidth=1.5; ctx.beginPath();
+      for (let k=0;k<2;k++){ const b=sa+k*Math.PI/2; ctx.moveTo(sx-Math.cos(b)*4,sy-Math.sin(b)*4); ctx.lineTo(sx+Math.cos(b)*4,sy+Math.sin(b)*4); } ctx.stroke();
+      break; }
+    default: ctx.fillStyle=f.c; ctx.beginPath(); ctx.arc(f.x,f.y,f.r,0,Math.PI*2); ctx.fill();
+  }
+}
+
 function draw(){
   ctx.fillStyle = '#1b1330'; ctx.fillRect(0,0,W,H);
   const sh = FX.shakeOffset(); ctx.save(); ctx.translate(W/2-cam.x+sh.x, H/2-cam.y+sh.y);
@@ -308,7 +341,7 @@ function draw(){
   // arena edge
   ctx.strokeStyle='#ff5d4a'; ctx.lineWidth=6; ctx.beginPath(); ctx.arc(0,0,ARENA,0,Math.PI*2); ctx.stroke();
   // food
-  for (const f of food){ if(Math.abs(f.x-cam.x)>W/2+20||Math.abs(f.y-cam.y)>H/2+20) continue; ctx.fillStyle=f.c; ctx.beginPath(); ctx.arc(f.x,f.y,f.r,0,Math.PI*2); ctx.fill(); }
+  for (const f of food){ if(Math.abs(f.x-cam.x)>W/2+20||Math.abs(f.y-cam.y)>H/2+20) continue; drawFood(f); }
   FX.drawWorld(ctx);
   // worms
   for (const s of worms){

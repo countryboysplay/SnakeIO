@@ -36,6 +36,10 @@ test('starts a round, steers and boosts through several seconds of play', () => 
   dom.frame(240);
   const len = +dom.el('len').textContent;
   assert.ok(Number.isFinite(len) && len > 0, `HUD length should be a number, got "${dom.el('len').textContent}"`);
+  const food = globalThis.NoodleDebug.state().food, kinds = new Set(food.map(f => f.kind));
+  assert.ok(kinds.has('crumb') && kinds.has('berry'), `food has tiers (saw ${[...kinds].join(',')})`);
+  assert.ok(food.filter(f => f.kind === 'apple').length <= 2, 'apple cap');
+  assert.ok(food.every(f => Number.isFinite(f.v) && Number.isFinite(f.r)), 'every food item carries v and r');
 });
 
 test('round label was populated from ROUNDS and HUD best mirrors storage', () => {
