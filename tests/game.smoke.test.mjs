@@ -72,19 +72,25 @@ test('running the wall kills the player and progress is written to localStorage'
 });
 
 test('pause freezes the run, resume continues it, tab-hide auto-pauses, quit returns to title', () => {
+  // Rivals spawn ≥200 px from the player and move ~2.6 px/frame, so within a handful of frames
+  // no collision is possible — keeping this test deterministic without seeding Math.random.
   dom.el('start').onclick();                       // retry
-  dom.frame(30);
+  dom.frame(2);
   const ov = dom.el('overlay'), pauseBtn = dom.el('pause');
   assert.equal(pauseBtn.hidden, false, 'pause button visible during play');
+  assert.equal(ov.inert, true, 'hidden overlay is inert so its buttons cannot be re-triggered');
   const lenBefore = dom.el('len').textContent;
+  dom.fireWindow('keydown', { code: 'KeyP', repeat: true });
+  assert.equal(ov.classList.contains('show'), false, 'auto-repeated P is ignored');
   dom.fireWindow('keydown', { code: 'KeyP' });
   assert.ok(ov.classList.contains('show') && ov.innerHTML.includes('Paused'));
   assert.equal(pauseBtn.hidden, true);
+  assert.equal(ov.inert, false);
   dom.frame(120);
   assert.equal(dom.el('len').textContent, lenBefore, 'no simulation while paused');
   dom.el('resume').onclick();
   assert.equal(ov.classList.contains('show'), false, 'resume hides the overlay');
-  dom.frame(30);
+  dom.frame(2);
   document.visibilityState = 'hidden'; dom.fireWindow('visibilitychange'); document.visibilityState = 'visible';
   assert.ok(ov.innerHTML.includes('Paused'), 'hiding the tab pauses');
   const eatenBefore = dom.storage.get('noodleEaten');

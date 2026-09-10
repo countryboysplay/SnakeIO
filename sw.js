@@ -20,6 +20,9 @@ self.addEventListener('fetch', e => {
         e.waitUntil(caches.open(CACHE).then(c => c.put(e.request, copy)));
       }
       return res;
-    }).catch(() => caches.match(e.request).then(r => r || caches.match('./index.html')))
+    }).catch(() => caches.match(e.request).then(r =>
+      // only page navigations fall back to the app shell — a script/style miss must fail, not get HTML
+      r || (e.request.mode === 'navigate' ? caches.match('./index.html') : Response.error())
+    ))
   );
 });

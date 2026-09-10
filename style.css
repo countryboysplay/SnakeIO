@@ -2,9 +2,10 @@
   * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
   html, body { height:100%; overflow:hidden; background:var(--ink); font-family: "Avenir Next", "Helvetica Neue", Arial, sans-serif; color:var(--paper); touch-action:none; overscroll-behavior:none; }
   canvas { display:block; width:100vw; height:100vh; }
-  #hud { position:fixed; top:env(safe-area-inset-top, 0); left:0; right:0; padding:12px 16px; display:flex; justify-content:space-between; align-items:baseline; pointer-events:none; font-weight:700; font-size:18px; text-shadow:0 1px 3px rgba(0,0,0,.6); }
-  #hud { gap:12px; }
+  /* z-index above #overlay so the HUD buttons stay tappable on menu screens; wraps on narrow phones */
+  #hud { position:fixed; z-index:6; top:env(safe-area-inset-top, 0); left:0; right:0; padding:10px 14px; display:flex; flex-wrap:wrap; align-items:center; gap:4px 12px; pointer-events:none; font-weight:700; font-size:16px; text-shadow:0 1px 3px rgba(0,0,0,.6); }
   #hud > div { white-space:nowrap; }
+  #hud .btns { display:flex; gap:8px; margin-left:auto; }
   .hudBtn { pointer-events:auto; width:36px; height:36px; border-radius:18px; border:0; background:rgba(255,255,255,.14); color:var(--paper); font-size:17px; line-height:36px; text-align:center; text-shadow:none; }
   .hudBtn:active { transform:translateY(1px); background:rgba(255,255,255,.22); }
   #hud small { font-weight:500; opacity:.8; font-size:13px; margin-left:6px; }
@@ -16,8 +17,8 @@
   #stick { position:fixed; left:22px; bottom:calc(22px + env(safe-area-inset-bottom, 0)); width:150px; height:150px; border-radius:50%; background:rgba(255,255,255,.12); border:3px solid rgba(255,255,255,.35); z-index:5; }
   #knob { position:absolute; left:50%; top:50%; width:64px; height:64px; margin:-32px 0 0 -32px; border-radius:50%; background:var(--sky); box-shadow:0 4px 0 #2a7fb0; pointer-events:none; }
   #boost.on { transform:translateY(4px); box-shadow:0 2px 0 #b8362a; }
-  #overlay { position:fixed; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; padding:24px; background:rgba(27,19,48,.88); opacity:0; transform:scale(.96); pointer-events:none; transition:opacity .25s ease, transform .25s ease; }
-  #overlay.show { opacity:1; transform:none; pointer-events:auto; }
+  #overlay { position:fixed; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; padding:24px; background:rgba(27,19,48,.88); opacity:0; transform:scale(.96); pointer-events:none; visibility:hidden; transition:opacity .25s ease, transform .25s ease, visibility 0s linear .25s; }
+  #overlay.show { opacity:1; transform:none; pointer-events:auto; visibility:visible; transition-delay:0s; }
   #overlay .score { animation: scoreIn .4s cubic-bezier(.2,.9,.3,1.2); }
   @keyframes scoreIn { from{transform:scale(.4); opacity:0} to{transform:none; opacity:1} }
   #overlay .sub { font-size:13px; opacity:.7; margin:-14px 0 24px; max-width:300px; line-height:1.4; }

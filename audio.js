@@ -103,15 +103,17 @@
     const drones = [0, 4].map(det => { const o = ac.createOscillator(); o.type = 'triangle'; o.frequency.value = p.root; o.detune.value = det; o.connect(f); o.start(); return o; });
     const nodes = [...drones, lfo], timers = [];
     const alive = () => music && music.m === m;
+    // while the context is suspended (backgrounded tab) keep the clock running but schedule nothing,
+    // otherwise every skipped note would pile up at t=0 and fire together on resume
+    const live = () => ac.state === 'running';
     const pluck = () => {
       if (!alive()) return;
-      const deg = p.scale[Math.random() * p.scale.length | 0];
-      osc('triangle', p.root * 2 * Math.pow(2, deg / 12) * (Math.random() < 0.3 ? 2 : 1), now(), 0.8, g, 0.35, { a: 0.01 });
+      if (live()) { const deg = p.scale[Math.random() * p.scale.length | 0]; osc('triangle', p.root * 2 * Math.pow(2, deg / 12) * (Math.random() < 0.3 ? 2 : 1), now(), 0.8, g, 0.35, { a: 0.01 }); }
       timers.push(setTimeout(pluck, (p.pluck[0] + Math.random() * (p.pluck[1] - p.pluck[0])) * 1000));
     };
     timers.push(setTimeout(pluck, 800));
     if (p.bpm) {
-      const beat = () => { if (!alive()) return; osc('sine', p.root / 2, now(), 0.18, g, 0.5); timers.push(setTimeout(beat, 60000 / p.bpm)); };
+      const beat = () => { if (!alive()) return; if (live()) osc('sine', p.root / 2, now(), 0.18, g, 0.5); timers.push(setTimeout(beat, 60000 / p.bpm)); };
       timers.push(setTimeout(beat, 200));
     }
     if (p.wind) {
@@ -145,9 +147,11 @@
       musicBus = ac.createGain(); musicBus.gain.value = MUSIC_LEVEL; musicBus.connect(master);
       if (pendingMode && pendingMode !== 'off') { const m = pendingMode; pendingMode = null; mode = 'off'; setMusic(m); }
     }
-    if (ac.state === 'suspended') ac.resume();
+    wake();
     return true;
   }
+  // resume an existing context (covers Safari's 'interrupted' state too) — never constructs one, so it's safe without a gesture
+  function wake() { if (ac && ac.state !== 'running') { const p = ac.resume(); if (p && p.catch) p.catch(() => {}); } }
   function setMuted(b) {
     muted = !!b;
     if (!master) return;
@@ -156,7 +160,7 @@
   }
 
   G.Sound = {
-    unlock, boost, setMuted,
+    unlock, wake, boost, setMuted,
     play(name, arg) { if (canPlay() && SFX[name]) SFX[name](arg); },
     music: setMusic,
     get muted() { return muted; },

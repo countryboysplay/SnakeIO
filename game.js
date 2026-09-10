@@ -5,10 +5,10 @@ const muteBtn = document.getElementById('mute');
 function setMuted(b){ Sound.setMuted(b); store.set('noodleMuted', b?'1':'0'); muteBtn.textContent = b ? '🔇' : '🔊'; }
 setMuted(store.get('noodleMuted')==='1');
 muteBtn.addEventListener('pointerdown', e=>{ e.preventDefault(); Sound.unlock(); setMuted(!Sound.muted); Sound.play('tap'); });
-const unlockOnce = ()=>{ Sound.unlock(); removeEventListener('pointerdown', unlockOnce); removeEventListener('touchstart', unlockOnce); removeEventListener('keydown', unlockOnce); };
-addEventListener('pointerdown', unlockOnce); addEventListener('touchstart', unlockOnce, {passive:true}); addEventListener('keydown', unlockOnce);
-addEventListener('keydown', e=>{ if(e.code==='KeyM') setMuted(!Sound.muted); });
-document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='visible') Sound.unlock(); });
+// every gesture (re)unlocks: iOS suspends/interrupts the context whenever the app is backgrounded
+addEventListener('pointerdown', ()=>Sound.unlock()); addEventListener('touchstart', ()=>Sound.unlock(), {passive:true}); addEventListener('keydown', ()=>Sound.unlock());
+addEventListener('keydown', e=>{ if(e.code==='KeyM' && !e.repeat) setMuted(!Sound.muted); });
+document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='visible') Sound.wake(); });
 addEventListener('error', e=>{ const d=document.createElement('div'); d.style.cssText='position:fixed;top:60px;left:10px;right:10px;background:#900;color:#fff;padding:10px;font:12px monospace;z-index:99;white-space:pre-wrap'; d.textContent='Error: '+e.message+' @'+e.lineno; document.body.appendChild(d); });
 const standalone = matchMedia('(display-mode: standalone)').matches || navigator.standalone;
 const cv = document.getElementById('c'); let ctx = cv.getContext('2d');
@@ -33,7 +33,7 @@ const ROUNDS = [
   {target:0,   rivals:10, rivalLen:[30,90],  name:'The Pit King', king:true},
 ];
 const KING_LEN = 320;
-let round = 0, maxRound = +store.get('noodleRound') || 0, king = null, gameWon = false;
+let round = 0, maxRound = +store.get('noodleRound') || 0, king = null;
 const goalEl=document.getElementById('goal'), roundNumEl=document.getElementById('roundNum'), roundNameEl=document.getElementById('roundName');
 function buildRoundPicker(){
   const box=document.getElementById('rounds'); if(!box) return; box.innerHTML='';
@@ -142,11 +142,16 @@ function showOverlay(html){
   buildRoundPicker(); buildSkinPicker();
   const sc = overlay.querySelector('.score'); if (sc) countUp(sc, +sc.dataset.count);
   const b = overlay.querySelector('#start'); if (b) b.onclick = start;
-  overlay.classList.add('show');
+  overlay.classList.add('show'); overlay.inert = false;
   boostBtn.style.display='none'; pauseBtn.hidden = true;
   Sound.music('menu');
 }
-function hideOverlay(){ overlay.classList.remove('show'); boostBtn.style.display='flex'; pauseBtn.hidden = false; }
+function hideOverlay(){
+  // inert + blur so the just-clicked Play button can't be re-triggered by Space/Enter during play
+  overlay.classList.remove('show'); overlay.inert = true;
+  const a = document.activeElement; if (a && a.blur) a.blur();
+  boostBtn.style.display='flex'; pauseBtn.hidden = false;
+}
 
 // pause: freeze the run without ending it; auto-pause when the tab is hidden
 const pauseBtn = document.getElementById('pause');
@@ -159,7 +164,7 @@ function pauseScreen(){
 }
 function pause(){
   if (!running || paused) return;
-  paused = true; running = false; boosting = false; Sound.boost(false);
+  paused = true; running = false; boosting = false; player.boost = 0; Sound.boost(false);
   showOverlay(pauseScreen());
   overlay.querySelector('#resume').onclick = ()=>{ Sound.play('tap'); resume(); };
   overlay.querySelector('#quit').onclick = ()=>{ Sound.play('tap'); quitToMenu(); };
@@ -168,7 +173,7 @@ function resume(){
   if (!paused) return;
   paused = false; running = true;
   hideOverlay();
-  Sound.music(ROUNDS[round].king ? 'king' : 'play');
+  Sound.unlock(); Sound.music(ROUNDS[round].king ? 'king' : 'play');
 }
 function quitToMenu(){
   paused = false; running = false; Sound.boost(false);
@@ -176,8 +181,8 @@ function quitToMenu(){
   reset();
   showOverlay(titleScreen());
 }
-pauseBtn.addEventListener('pointerdown', e=>{ e.preventDefault(); Sound.play('tap'); pause(); });
-addEventListener('keydown', e=>{ if(e.code==='Escape' || e.code==='KeyP'){ if (paused) resume(); else pause(); } });
+pauseBtn.addEventListener('pointerdown', e=>{ e.preventDefault(); Sound.unlock(); Sound.play('tap'); pause(); });
+addEventListener('keydown', e=>{ if((e.code==='Escape' || e.code==='KeyP') && !e.repeat){ if (paused) resume(); else pause(); } });
 document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='hidden' && running) pause(); });
 
 let worms = [], food = [], player, running = false, steer = null, boosting = false, cam = {x:0,y:0}, tick = 0;
@@ -218,13 +223,14 @@ function kill(s, by){
       FX.shake(Math.min(10, 3 + s.len/20), 15); FX.flash('rgba(255,255,255,.18)', 2);
       if (s.isKing) FX.shake(18, 36);
     }
-    if (!s.isKing) setTimeout(()=>{ if(!running) return; const i=worms.indexOf(s); if(i>-1) worms[i]=mkWorm(false); }, 1500);
+    if (!s.isKing) s.respawnAt = tick + 90;   // on the tick clock so a pause can't swallow the respawn
   }
 }
 function radius(s){ return 5 + Math.min(10, s.len/25); }
 
 function update(){
   tick++;
+  for (let i=0;i<worms.length;i++){ const s=worms[i]; if (s.dead && s.respawnAt!=null && tick>=s.respawnAt) worms[i]=mkWorm(false); }
   // spawn food to keep arena stocked
   if (food.length < 380 && tick%4===0){ const a=rnd(0,Math.PI*2), r=Math.sqrt(Math.random())*(ARENA-30); mkFood(Math.cos(a)*r, Math.sin(a)*r); }
   for (const s of worms){
@@ -333,7 +339,7 @@ function roundWin(){
   FX.confetti(W/2, H*0.45, 60, PALETTE);
   if (player.len>best){ best=player.len; store.set('noodleBest',best); bestEl.textContent=best; }
   const newly = SKINS.filter(k=>k.need() && !unlockedBefore.has(k.id)); if (newly.length) Sound.play('unlock');
-  const R=ROUNDS[round], last = round===ROUNDS.length-1;
+  const last = round===ROUNDS.length-1;
   if (!last){ maxRound=Math.max(maxRound, round+1); store.set('noodleRound',maxRound); round++; }
   showOverlay(last ? winScreen() : roundClearScreen());
 }
@@ -361,7 +367,7 @@ cv.addEventListener('touchmove', e=>e.preventDefault(), {passive:false});
 const bOn=e=>{ e.preventDefault(); boosting=true; boostBtn.classList.add('on'); }, bOff=e=>{ boosting=false; boostBtn.classList.remove('on'); };
 boostBtn.addEventListener('touchstart', bOn, {passive:false});
 boostBtn.addEventListener('pointerdown', bOn); boostBtn.addEventListener('pointerup', bOff); boostBtn.addEventListener('pointercancel', bOff); boostBtn.addEventListener('pointerleave', bOff);
-addEventListener('keydown', e=>{ if(e.code==='Space') boosting=true; }); addEventListener('keyup', e=>{ if(e.code==='Space') boosting=false; });
+addEventListener('keydown', e=>{ if(e.code==='Space'){ e.preventDefault(); boosting=true; } }); addEventListener('keyup', e=>{ if(e.code==='Space') boosting=false; });
 
 reset(); showOverlay(titleScreen()); loop();
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(()=>{});

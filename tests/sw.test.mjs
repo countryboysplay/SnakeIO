@@ -22,17 +22,18 @@ globalThis.caches = {
 };
 let nextResponse;
 globalThis.fetch = async () => nextResponse;
+globalThis.Response = { error: () => ({ status: 0, ok: false, type: 'error' }) };
 
 loadScript('sw.js');
 
 function fakeResponse(status) {
   return { status, ok: status >= 200 && status < 300, clone() { return { status, ok: this.ok }; } };
 }
-function dispatchFetch(url) {
+function dispatchFetch(url, mode = 'no-cors') {
   const waits = [];
   let responded;
   listeners.fetch({
-    request: { method: 'GET', url },
+    request: { method: 'GET', url, mode },
     respondWith: (p) => { responded = p; },
     waitUntil: (p) => { waits.push(p); },
   });
@@ -66,5 +67,17 @@ test('falls back to cache when fetch rejects (offline)', async () => {
   const { responded } = dispatchFetch('http://x/game.js');
   const res = await responded;
   assert.equal(res.status, 200);
+  globalThis.fetch = async () => nextResponse;
+});
+
+test('offline: a page navigation miss gets the app shell, a script miss gets a network error (never HTML)', async () => {
+  const shell = fakeResponse(200); shell.body = '<!DOCTYPE html>';
+  cacheStore.set('./index.html', shell);   // sw.js looks the shell up by its relative precache key
+  globalThis.fetch = async () => { throw new TypeError('offline'); };
+  const nav = await dispatchFetch('http://x/some-page', 'navigate').responded;
+  assert.equal(nav, shell, 'navigations fall back to index.html');
+  const script = await dispatchFetch('http://x/missing.js', 'no-cors').responded;
+  assert.equal(script.ok, false);
+  assert.notEqual(script, shell, 'a sub-resource must never be answered with index.html');
   globalThis.fetch = async () => nextResponse;
 });
