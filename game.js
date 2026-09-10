@@ -16,6 +16,13 @@ function ctxSwap(g){ ctx=g; }
 const lenEl = document.getElementById('len'), bestEl = document.getElementById('best');
 let lastLen = 10;
 function lenPop(){ lenEl.classList.remove('pop'); void lenEl.offsetWidth; lenEl.classList.add('pop'); }
+// active power-up pills in the HUD; rebuilt only when the set changes, bars updated every 6 ticks
+const buffsEl = document.getElementById('buffs'); let buffKeys = '';
+function renderBuffs(force){
+  const act = effects.active(), keys = act.map(a=>a.kind).join(',');
+  if (force || keys !== buffKeys){ buffKeys = keys; buffsEl.innerHTML = act.map(a=>`<span class="buff" style="--c:${Items.POWERUPS[a.kind].c}"><i>${Items.POWERUPS[a.kind].glyph}</i><b class="bar"></b></span>`).join(''); }
+  if (force || tick%6===0){ const bars = buffsEl.querySelectorAll('.bar'); act.forEach((a,i)=>{ if (bars[i]) bars[i].style.width = Math.round(a.frac*100)+'%'; }); }
+}
 const overlay = document.getElementById('overlay'), boostBtn = document.getElementById('boost');
 let W, H, DPR;
 function resize(){ DPR = Math.min(devicePixelRatio||1, 1.5); W = innerWidth; H = innerHeight; cv.width = W*DPR; cv.height = H*DPR; ctx.setTransform(DPR,0,0,DPR,0,0); }
@@ -188,6 +195,22 @@ document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState=
 let worms = [], food = [], player, running = false, steer = null, boosting = false, cam = {x:0,y:0}, tick = 0;
 let playerHitWall = false, godMode = false;
 
+// power-ups: one pickup on the arena at a time, player-only effects on a frame clock
+let pickups = [], nextPickupAt = 0;
+const effects = Items.createEffects();
+function schedulePickup(){ nextPickupAt = tick + rnd(Items.PICKUP.interval[0], Items.PICKUP.interval[1]); }
+function spawnPickup(kind, x, y){
+  if (x==null){ for (let t=0;t<10;t++){ const a=rnd(0,Math.PI*2), r=rnd(200,ARENA-200); x=Math.cos(a)*r; y=Math.sin(a)*r; if (Math.hypot(x-player.x,y-player.y)>=Items.PICKUP.minDist) break; } }
+  pickups.push({ x, y, kind: kind || Items.pickPowerup(), born: tick });
+}
+// the shield absorbs one fatal hit: bounce, shed 10% length, pull back inside the arena
+function shieldSave(){
+  effects.consume('shield'); playerHitWall = false;
+  player.ang += Math.PI; player.len = Math.max(6, Math.floor(player.len*0.9));
+  const d = Math.hypot(player.x,player.y); if (d > ARENA-20){ player.x *= (ARENA-20)/d; player.y *= (ARENA-20)/d; }
+  FX.shake(8,12); FX.burst(player.x,player.y,24,'#c9f24a',{speed:4,life:24,r:2.5}); Sound.play('shieldHit');
+}
+
 function rnd(a,b){ return a + Math.random()*(b-a); }
 // food comes in tiers (Items.FOOD); crumbs keep the palette colours, the rest have a fixed look
 const FOOD_COLORS = { berry:'#c9457f', grub:'#f3e6a2', apple:'#ffd23f' };
@@ -210,6 +233,7 @@ function mkWorm(isPlayer, len){
 function reset(){
   FX.clear(); playerHitWall = false;
   worms = []; food = []; appleCount = 0;
+  pickups = []; effects.clear(); nextPickupAt = tick + Items.PICKUP.first; renderBuffs(true);
   player = mkWorm(true); player.x = 0; player.y = 0; player.pts = player.pts.map((p,i)=>({x:-Math.cos(player.ang)*i*SEG, y:-Math.sin(player.ang)*i*SEG}));
   worms.push(player);
   const R=ROUNDS[round]; king=null;
@@ -222,6 +246,7 @@ function reset(){
 }
 function kill(s, by){
   if (s===player && godMode){ playerHitWall = false; const d=Math.hypot(s.x,s.y); if (d>ARENA-20){ s.x*=(ARENA-20)/d; s.y*=(ARENA-20)/d; } return; }
+  if (s===player && effects.has('shield')){ shieldSave(); return; }
   s.dead = true;
   for (let i=0;i<s.pts.length;i+=2){ const p=s.pts[i]; mkFood(p.x+rnd(-4,4), p.y+rnd(-4,4), 'chunk', s.c); }
   FX.burst(s.x, s.y, Math.min(24, 12 + (s.len/12|0)), s.c, { speed: 3.5, life: 36, r: 3 });
@@ -242,6 +267,18 @@ function radius(s){ return 5 + Math.min(10, s.len/25); }
 function update(){
   tick++;
   for (let i=0;i<worms.length;i++){ const s=worms[i]; if (s.dead && s.respawnAt!=null && tick>=s.respawnAt) worms[i]=mkWorm(false); }
+  // power-up pickups: spawn, expire, collect (player only)
+  if (!pickups.length && tick >= nextPickupAt) spawnPickup();
+  for (let i=pickups.length-1;i>=0;i--){ const p=pickups[i];
+    if (tick - p.born >= Items.PICKUP.ttl){ pickups.splice(i,1); schedulePickup(); continue; }
+    const rr = radius(player)+14;
+    if (!player.dead && (p.x-player.x)**2+(p.y-player.y)**2 < rr*rr){
+      const P = Items.POWERUPS[p.kind]; effects.add(p.kind, P.dur);
+      FX.burst(p.x,p.y,14,P.c,{speed:4,life:30,r:2.5}); Sound.play('pickup'); pickups.splice(i,1); schedulePickup();
+    }
+  }
+  for (const k of effects.tick()) Sound.play('buffEnd');
+  if (effects.has('magnet')){ for (const f of food){ const dx=player.x-f.x, dy=player.y-f.y, d=Math.hypot(dx,dy); if (d<140 && d>1){ f.x += dx/d*4; f.y += dy/d*4; } } }
   // spawn food to keep arena stocked
   if (food.length < 280 && tick%4===0) spawnFood();
   for (const s of worms){
@@ -270,8 +307,9 @@ function update(){
     let d = target - s.ang; d = Math.atan2(Math.sin(d), Math.cos(d));
     s.ang += Math.max(-0.11, Math.min(0.11, d));
     s.turn = Math.abs(Math.max(-0.11, Math.min(0.11, d)))/0.11;
-    const sp = BASE_SPEED * (s.boost ? 2.2 : 1);
-    if (s.boost && tick%10===0 && s.len>6){ s.len--; const t=s.pts[s.pts.length-1]; mkFood(t.x,t.y,'crumb'); }
+    const speedBuff = s===player && effects.has('speed');
+    const sp = BASE_SPEED * (s.boost || speedBuff ? 2.2 : 1);
+    if (s.boost && !speedBuff && tick%10===0 && s.len>6){ s.len--; const t=s.pts[s.pts.length-1]; mkFood(t.x,t.y,'crumb'); }
     s.x += Math.cos(s.ang)*sp; s.y += Math.sin(s.ang)*sp;
     // arena wall
     if (Math.hypot(s.x,s.y) > ARENA){ if (s===player) playerHitWall = true; kill(s, null); continue; }
@@ -282,12 +320,13 @@ function update(){
     const r = radius(s)+6;
     for (let i=food.length-1;i>=0;i--){ const f=food[i]; if((f.x-s.x)**2+(f.y-s.y)**2 < r*r){ s.len += f.v; if (s===player){ FX.burst(f.x, f.y, 3 + (f.v/2|0), f.c, { speed: 1.8 + f.v*0.15, life: 15, r: 1.8 }); Sound.play('eat', f.v); if (f.kind==='apple') Sound.play('apple'); } eatFood(i); } }
   }
-  // collisions (head into other body)
+  // collisions (head into other body); a ghosted player is skipped both ways
+  const ghost = effects.has('ghost');
   for (const s of worms){
     if (s.dead) continue;
     const r = radius(s);
     for (const o of worms){
-      if (o===s||o.dead) continue;
+      if (o===s||o.dead||(ghost&&(s===player||o===player))) continue;
       const orr = radius(o), rr=(r+orr)*(r+orr);
       for (let i=0;i<o.pts.length;i+=2){ const p=o.pts[i]; if((p.x-s.x)**2+(p.y-s.y)**2<rr){
         if (s.len < o.len) kill(s, o);                    // ran into something bigger: you're done
@@ -307,6 +346,7 @@ function update(){
   cam.x += (player.x-cam.x)*camK; cam.y += (player.y-cam.y)*camK;
   FX.update();
   if (player.len !== lastLen){ if (player.len > lastLen) lenPop(); lastLen = player.len; lenEl.textContent = player.len; }
+  renderBuffs();
 }
 
 function drawFood(f){
@@ -342,13 +382,23 @@ function draw(){
   ctx.strokeStyle='#ff5d4a'; ctx.lineWidth=6; ctx.beginPath(); ctx.arc(0,0,ARENA,0,Math.PI*2); ctx.stroke();
   // food
   for (const f of food){ if(Math.abs(f.x-cam.x)>W/2+20||Math.abs(f.y-cam.y)>H/2+20) continue; drawFood(f); }
+  // power-up pickups: pulsing ring + glyph, blinking before they expire
+  for (const p of pickups){
+    if (Items.PICKUP.ttl-(tick-p.born) < Items.PICKUP.blinkAt && (tick>>3)&1) continue;
+    if(Math.abs(p.x-cam.x)>W/2+30||Math.abs(p.y-cam.y)>H/2+30) continue;
+    const P=Items.POWERUPS[p.kind], R=14+2*Math.sin(tick/6);
+    ctx.fillStyle='rgba(27,19,48,.85)'; ctx.beginPath(); ctx.arc(p.x,p.y,R,0,Math.PI*2); ctx.fill();
+    ctx.strokeStyle=P.c; ctx.lineWidth=3; ctx.stroke();
+    ctx.font='16px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillStyle='#fff'; ctx.fillText(P.glyph,p.x,p.y+1); ctx.textBaseline='alphabetic';
+  }
   FX.drawWorld(ctx);
   // worms
   for (const s of worms){
     if (s.dead) continue;
     const r = radius(s);
     if (s!==player && s.pts.every(p=>Math.abs(p.x-cam.x)>W/2+40||Math.abs(p.y-cam.y)>H/2+40)) continue;
-    paintBody(s.pts, r, s.skin || {c:s.c,type:'solid'}, s.boost, s.ang, s.x, s.y, s.turn);
+    if (s===player && effects.has('ghost')) ctx.globalAlpha=.5;
+    paintBody(s.pts, r, s.skin || {c:s.c,type:'solid'}, s.boost || (s===player && effects.has('speed')), s.ang, s.x, s.y, s.turn);
     // eyes
     const ex=Math.cos(s.ang+Math.PI/2)*r*.5, ey=Math.sin(s.ang+Math.PI/2)*r*.5, fx=Math.cos(s.ang)*r*.35, fy=Math.sin(s.ang)*r*.35;
     ctx.fillStyle='#fff';
@@ -358,6 +408,11 @@ function draw(){
     const px = Math.cos(s.ang+look*0.6)*r*.1, py = Math.sin(s.ang+look*0.6)*r*.1;
     ctx.fillStyle='#1b1330';
     ctx.beginPath(); ctx.arc(s.x+ex+fx*1.6+px,s.y+ey+fy*1.6+py,r*.17,0,Math.PI*2); ctx.arc(s.x-ex+fx*1.6+px,s.y-ey+fy*1.6+py,r*.17,0,Math.PI*2); ctx.fill();
+    if (s===player){
+      ctx.globalAlpha=1;
+      if (effects.has('shield')){ ctx.strokeStyle='rgba(201,242,74,.6)'; ctx.lineWidth=3; ctx.beginPath(); ctx.arc(s.x,s.y,r*1.9,0,Math.PI*2); ctx.stroke(); }
+      if (effects.has('magnet')){ ctx.strokeStyle='rgba(255,93,74,.12)'; ctx.lineWidth=2; ctx.beginPath(); ctx.arc(s.x,s.y,140,0,Math.PI*2); ctx.stroke(); }
+    }
   }
   ctx.restore();
   FX.drawScreen(ctx, W, H);
@@ -405,8 +460,9 @@ addEventListener('keydown', e=>{ if(e.code==='Space'){ e.preventDefault(); boost
 
 // read-only debug hook for the headless smoke tests and tools/balance-sim.mjs
 window.NoodleDebug = {
-  state: () => ({ worms, food, player, round, tick, running, paused, target: ROUNDS[round].king ? KING_LEN : ROUNDS[round].target }),
+  state: () => ({ worms, food, pickups, effects, player, round, tick, running, paused, target: ROUNDS[round].king ? KING_LEN : ROUNDS[round].target }),
   steer: a => { steer = a; },
+  spawnPickup: kind => spawnPickup(kind, player.x, player.y),
   setRound: i => { round = i; },
   setGodMode: b => { godMode = !!b; },   // sim only: measure growth without the autopilot's deaths
 };

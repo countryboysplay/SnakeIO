@@ -8,6 +8,10 @@
   #hud .btns { display:flex; gap:8px; margin-left:auto; }
   .hudBtn { pointer-events:auto; width:36px; height:36px; border-radius:18px; border:0; background:rgba(255,255,255,.14); color:var(--paper); font-size:17px; line-height:36px; text-align:center; text-shadow:none; }
   .hudBtn:active { transform:translateY(1px); background:rgba(255,255,255,.22); }
+  #buffs { display:flex; gap:6px; }
+  .buff { position:relative; width:30px; height:30px; border-radius:10px; background:rgba(255,255,255,.14); display:flex; align-items:center; justify-content:center; font-size:16px; overflow:hidden; }
+  .buff i { font-style:normal; position:relative; z-index:1; }
+  .buff .bar { position:absolute; left:0; bottom:0; height:4px; background:var(--c); width:100%; transition:width .1s linear; }
   #hud small { font-weight:500; opacity:.8; font-size:13px; margin-left:6px; }
   #goal.met { color:var(--lime); opacity:1; }
   #len { display:inline-block; }

@@ -53,7 +53,7 @@ test('unlock is idempotent — one AudioContext ever', () => {
 });
 
 test('every SFX name plays without throwing and makes at least one node', () => {
-  for (const n of ['eat', 'eatWorm', 'death', 'wall', 'roundWin', 'unlock', 'tap', 'apple']) {
+  for (const n of ['eat', 'eatWorm', 'death', 'wall', 'roundWin', 'unlock', 'tap', 'apple', 'pickup', 'shieldHit', 'buffEnd']) {
     const before = snap();
     Sound.play(n, 30);
     assert.ok(made.osc + made.src > before.osc + before.src, `${n} should create a source node`);

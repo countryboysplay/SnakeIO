@@ -104,3 +104,27 @@ test('pause freezes the run, resume continues it, tab-hide auto-pauses, quit ret
   assert.equal(dom.storage.get('noodleEaten'), eatenBefore, 'quit is not a death');
   dom.frame(10);
 });
+
+test('power-ups: collect → effect + HUD pill; magnet pulls; speed suspends drain; shield survives the wall', () => {
+  const D = globalThis.NoodleDebug;
+  dom.el('start').onclick(); dom.frame(2);
+  D.spawnPickup('magnet'); dom.frame(1);
+  let st = D.state();
+  assert.ok(st.effects.has('magnet'), 'pickup at the head is collected next frame');
+  assert.ok(dom.el('buffs').innerHTML.includes('🧲'), 'HUD shows the buff');
+  st.food.push({ x: st.player.x + 100, y: st.player.y, kind: 'crumb', v: 1, r: 3, c: '#fff', ph: 0 });
+  const f = st.food[st.food.length - 1], d0 = Math.hypot(f.x - st.player.x, f.y - st.player.y);
+  dom.frame(3);
+  assert.ok(Math.hypot(f.x - D.state().player.x, f.y - D.state().player.y) < d0, 'magnet pulls food toward the head');
+  D.spawnPickup('speed'); dom.frame(1); assert.ok(D.state().effects.has('speed'));
+  const len0 = D.state().player.len;
+  dom.fireWindow('keydown', { code: 'Space' }); dom.frame(20); dom.fireWindow('keyup', { code: 'Space' });
+  assert.ok(D.state().player.len >= len0, 'speed buff suspends boost drain');
+  D.spawnPickup('shield'); dom.frame(1); assert.ok(D.state().effects.has('shield'));
+  const p = D.state().player; p.x = 2190; p.y = 0; p.ang = 0; D.steer(0); dom.frame(6);
+  st = D.state();
+  assert.equal(st.player.dead, false, 'shield saves from the wall');
+  assert.equal(st.effects.has('shield'), false, 'shield is consumed');
+  assert.ok(Math.hypot(st.player.x, st.player.y) <= 2200 && st.running, 'player is back inside and still running');
+  dom.fireWindow('keydown', { code: 'KeyP' }); dom.el('quit').onclick(); dom.frame(2);
+});
