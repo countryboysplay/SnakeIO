@@ -1,5 +1,5 @@
 (() => {
-const store={get:k=>{try{return store.get(k)}catch(e){return null}},set:(k,v)=>{try{store.set(k,v)}catch(e){}}};
+const store={get:k=>{try{return localStorage.getItem(k)}catch(e){return null}},set:(k,v)=>{try{localStorage.setItem(k,String(v))}catch(e){}}};
 addEventListener('error', e=>{ const d=document.createElement('div'); d.style.cssText='position:fixed;top:60px;left:10px;right:10px;background:#900;color:#fff;padding:10px;font:12px monospace;z-index:99;white-space:pre-wrap'; d.textContent='Error: '+e.message+' @'+e.lineno; document.body.appendChild(d); });
 if (matchMedia('(display-mode: standalone)').matches || navigator.standalone){ const h=document.getElementById('installHint'); if(h) h.remove(); }
 const cv = document.getElementById('c'); let ctx = cv.getContext('2d');
@@ -23,7 +23,7 @@ const ROUNDS = [
 ];
 const KING_LEN = 320;
 let round = 0, maxRound = +store.get('noodleRound') || 0, king = null, gameWon = false;
-const goalEl=document.getElementById('goal'), roundLbl=document.getElementById('roundLbl');
+const goalEl=document.getElementById('goal'), roundNumEl=document.getElementById('roundNum'), roundNameEl=document.getElementById('roundName');
 function buildRoundPicker(){
   const box=document.getElementById('rounds'); if(!box) return; box.innerHTML='';
   ROUNDS.forEach((r,i)=>{ const b=document.createElement('button'); b.className='rd'+(i===round?' sel':'')+(i>maxRound?' lock':''); b.textContent=r.king?'👑':i+1;
@@ -101,7 +101,7 @@ function reset(){
   for (let i=0;i<R.rivals;i++) worms.push(mkWorm(false));
   if (R.king){ king = mkWorm(false, KING_LEN); king.c='#ffd23f'; king.skin={c:'#ffd23f',c2:'#7a3e00',type:'bands'}; king.isKing=true; worms.push(king); }
   goalEl.textContent = R.king ? ' — eat the King' : ' / '+R.target+' and biggest';
-  roundLbl.innerHTML = 'Round '+(round+1)+' <small>'+R.name+'</small>';
+  roundNumEl.textContent = round+1; roundNameEl.textContent = R.name;
   for (let i=0;i<350;i++){ const a=rnd(0,Math.PI*2), r=Math.sqrt(Math.random())*(ARENA-30); mkFood(Math.cos(a)*r, Math.sin(a)*r); }
 }
 function kill(s){
