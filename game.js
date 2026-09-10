@@ -1,5 +1,14 @@
 (() => {
 const store={get:k=>{try{return localStorage.getItem(k)}catch(e){return null}},set:(k,v)=>{try{localStorage.setItem(k,String(v))}catch(e){}}};
+// sound: unlock the AudioContext on the first gesture (iOS), remember mute across sessions
+const muteBtn = document.getElementById('mute');
+function setMuted(b){ Sound.setMuted(b); store.set('noodleMuted', b?'1':'0'); muteBtn.textContent = b ? '🔇' : '🔊'; }
+setMuted(store.get('noodleMuted')==='1');
+muteBtn.addEventListener('pointerdown', e=>{ e.preventDefault(); Sound.unlock(); setMuted(!Sound.muted); Sound.play('tap'); });
+const unlockOnce = ()=>{ Sound.unlock(); removeEventListener('pointerdown', unlockOnce); removeEventListener('touchstart', unlockOnce); removeEventListener('keydown', unlockOnce); };
+addEventListener('pointerdown', unlockOnce); addEventListener('touchstart', unlockOnce, {passive:true}); addEventListener('keydown', unlockOnce);
+addEventListener('keydown', e=>{ if(e.code==='KeyM') setMuted(!Sound.muted); });
+document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='visible') Sound.unlock(); });
 addEventListener('error', e=>{ const d=document.createElement('div'); d.style.cssText='position:fixed;top:60px;left:10px;right:10px;background:#900;color:#fff;padding:10px;font:12px monospace;z-index:99;white-space:pre-wrap'; d.textContent='Error: '+e.message+' @'+e.lineno; document.body.appendChild(d); });
 if (matchMedia('(display-mode: standalone)').matches || navigator.standalone){ const h=document.getElementById('installHint'); if(h) h.remove(); }
 const cv = document.getElementById('c'); let ctx = cv.getContext('2d');
@@ -29,7 +38,7 @@ const goalEl=document.getElementById('goal'), roundNumEl=document.getElementById
 function buildRoundPicker(){
   const box=document.getElementById('rounds'); if(!box) return; box.innerHTML='';
   ROUNDS.forEach((r,i)=>{ const b=document.createElement('button'); b.className='rd'+(i===round?' sel':'')+(i>maxRound?' lock':''); b.textContent=r.king?'👑':i+1;
-    b.onclick=()=>{ if(i>maxRound) return; round=i; buildRoundPicker(); }; box.appendChild(b); });
+    b.onclick=()=>{ if(i>maxRound) return; Sound.play('tap'); round=i; buildRoundPicker(); }; box.appendChild(b); });
 }
 const SKINS = [
   {id:'lime',   name:'Lime',     c:'#c9f24a', type:'solid',  need:()=>true,        label:'free'},
@@ -94,7 +103,7 @@ function buildSkinPicker(){
     const pts=[]; for(let i=0;i<40;i++) pts.push({x:20+i*2.3, y:64+Math.sin(i/5)*22});
     const realCtx=ctx; ctxSwap(g); paintBody(pts,11,k,false,0,0,0); ctxSwap(realCtx);
     if(!ok){ const n=document.createElement('div'); n.className='need'; n.textContent=k.label; d.appendChild(n); }
-    d.onclick=()=>{ if(!ok) return; skinId=k.id; store.set('noodleSkin',skinId); buildSkinPicker(); };
+    d.onclick=()=>{ if(!ok) return; Sound.play('tap'); skinId=k.id; store.set('noodleSkin',skinId); buildSkinPicker(); };
     box.appendChild(d);
   }
 }
@@ -165,7 +174,8 @@ function update(){
       s.boost = Math.random()<.01 ? 30 : Math.max(0,(s.boost||0)-1);
     } else {
       target = steer==null ? s.ang : steer;
-      s.boost = boosting && s.len>6 ? 1 : 0;
+      const wasBoost = !!s.boost; s.boost = boosting && s.len>6 ? 1 : 0;
+      if (!!s.boost !== wasBoost) Sound.boost(!!s.boost);
     }
     let d = target - s.ang; d = Math.atan2(Math.sin(d), Math.cos(d));
     s.ang += Math.max(-0.11, Math.min(0.11, d));
@@ -180,7 +190,7 @@ function update(){
     while (s.pts.length > maxPts) s.pts.pop();
     // eat
     const r = radius(s)+6;
-    for (let i=food.length-1;i>=0;i--){ const f=food[i]; if((f.x-s.x)**2+(f.y-s.y)**2 < r*r){ s.len += f.v; if (s===player) FX.burst(f.x, f.y, 3, f.c, { speed: 1.8, life: 15, r: 1.8 }); food.splice(i,1); } }
+    for (let i=food.length-1;i>=0;i--){ const f=food[i]; if((f.x-s.x)**2+(f.y-s.y)**2 < r*r){ s.len += f.v; if (s===player){ FX.burst(f.x, f.y, 3, f.c, { speed: 1.8, life: 15, r: 1.8 }); Sound.play('eat', f.v); } food.splice(i,1); } }
   }
   // collisions (head into other body)
   for (const s of worms){
@@ -191,7 +201,7 @@ function update(){
       const orr = radius(o), rr=(r+orr)*(r+orr);
       for (let i=0;i<o.pts.length;i+=2){ const p=o.pts[i]; if((p.x-s.x)**2+(p.y-s.y)**2<rr){
         if (s.len < o.len) kill(s, o);                    // ran into something bigger: you're done
-        else { s.len += Math.ceil(o.len/2); if(s===player){ eaten++; store.set('noodleEaten',eaten); } kill(o, s); }   // bit something smaller: you eat it
+        else { s.len += Math.ceil(o.len/2); if(s===player){ eaten++; store.set('noodleEaten',eaten); Sound.play('eatWorm', o.len); } kill(o, s); }   // bit something smaller: you eat it
         break; } }
       if (s.dead) break;
     }
@@ -244,10 +254,11 @@ function draw(){
 function loop(){ if(running) update(); else FX.update(); draw(); requestAnimationFrame(loop); }
 let unlockedBefore=new Set();
 function roundWin(){
-  running=false;
+  running=false; Sound.boost(false); Sound.music('menu'); Sound.play('roundWin');
   FX.flash('rgba(201,242,74,.30)', 3);
   FX.confetti(W/2, H*0.45, 60, PALETTE);
   if (player.len>best){ best=player.len; store.set('noodleBest',best); bestEl.textContent=best; }
+  const newly = SKINS.filter(k=>k.need() && !unlockedBefore.has(k.id)); if (newly.length) Sound.play('unlock');
   const R=ROUNDS[round], last = round===ROUNDS.length-1;
   if (!last){ maxRound=Math.max(maxRound, round+1); store.set('noodleRound',maxRound); round++; }
   overlay.innerHTML = last
@@ -256,15 +267,15 @@ function roundWin(){
   overlay.classList.remove('hidden'); buildSkinPicker(); document.getElementById('start').onclick=start;
 }
 function gameOver(){
-  running=false; boostBtn.style.display='none';
+  running=false; boostBtn.style.display='none'; Sound.boost(false); Sound.music('menu'); Sound.play(playerHitWall ? 'wall' : 'death');
   if (player.len>best){ best=player.len; store.set('noodleBest',best); bestEl.textContent=best; }
-  const newly = SKINS.filter(k=>k.need() && !unlockedBefore.has(k.id));
+  const newly = SKINS.filter(k=>k.need() && !unlockedBefore.has(k.id)); if (newly.length) Sound.play('unlock');
   overlay.innerHTML = `<h1>Eaten<span>you grew to</span></h1><div class="score">${player.len}</div><p>Best ${best} · worms eaten ${eaten}${newly.length?`<br><b style="color:var(--lime)">New skin unlocked: ${newly.map(k=>k.name).join(', ')}</b>`:''}</p><div id="rounds"></div><div id="skins"></div><button id="start">Retry round ${round+1}</button>`;
   buildRoundPicker(); buildSkinPicker();
   overlay.classList.remove('hidden');
   document.getElementById('start').onclick = start;
 }
-function start(){ unlockedBefore=new Set(SKINS.filter(k=>k.need()).map(k=>k.id)); reset(); running=true; steer=null; boosting=false; overlay.classList.add('hidden'); boostBtn.style.display='flex'; }
+function start(){ Sound.play('tap'); unlockedBefore=new Set(SKINS.filter(k=>k.need()).map(k=>k.id)); reset(); running=true; Sound.unlock(); Sound.music(ROUNDS[round].king ? 'king' : 'play'); steer=null; boosting=false; overlay.classList.add('hidden'); boostBtn.style.display='flex'; }
 startBtn.onclick = start;
 
 // joystick in bottom-left: direction from stick center to finger
@@ -285,6 +296,6 @@ boostBtn.addEventListener('touchstart', bOn, {passive:false});
 boostBtn.addEventListener('pointerdown', bOn); boostBtn.addEventListener('pointerup', bOff); boostBtn.addEventListener('pointercancel', bOff); boostBtn.addEventListener('pointerleave', bOff);
 addEventListener('keydown', e=>{ if(e.code==='Space') boosting=true; }); addEventListener('keyup', e=>{ if(e.code==='Space') boosting=false; });
 
-reset(); buildRoundPicker(); buildSkinPicker(); loop();
+reset(); buildRoundPicker(); buildSkinPicker(); Sound.music('menu'); loop();
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(()=>{});
 })();

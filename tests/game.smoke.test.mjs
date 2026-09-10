@@ -40,6 +40,17 @@ test('round label was populated from ROUNDS and HUD best mirrors storage', () =>
   assert.equal(+dom.el('best').textContent, stored, 'the #best span must stay attached and live');
 });
 
+test('mute button toggles glyph and persists; M key toggles too', () => {
+  const mute = dom.el('mute');
+  assert.equal(mute.textContent, '🔊');
+  mute.dispatch('pointerdown', {});
+  assert.equal(mute.textContent, '🔇');
+  assert.equal(dom.storage.get('noodleMuted'), '1');
+  dom.fireWindow('keydown', { code: 'KeyM' });
+  assert.equal(mute.textContent, '🔊');
+  assert.equal(dom.storage.get('noodleMuted'), '0');
+});
+
 test('running the wall kills the player and progress is written to localStorage', () => {
   // Steer hard in one direction with boost until the arena wall ends the run (or 40 s pass).
   const stick = dom.el('stick');
