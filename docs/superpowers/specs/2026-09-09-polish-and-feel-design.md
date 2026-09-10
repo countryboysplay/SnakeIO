@@ -35,12 +35,15 @@ Each phase leaves the game fully playable and deployable.
 | `index.html` | `<head>`, markup only. Loads `style.css`, then `audio.js`, then `game.js` via plain tags. |
 | `style.css` | All CSS currently in the `<style>` block, plus new UI/transition styles. |
 | `audio.js` | Web Audio synth engine. Exposes one global, `Sound`. No game knowledge. |
-| `game.js` | Everything currently in the `<script>` block: loop, entities, AI, rounds, skins, input, overlay logic. Calls `Sound.*` and the new particle/shake helpers. |
+| `fx.js` | Particles, screen shake, screen flash. Exposes one global, `FX`. No game knowledge, no DOM — loadable in Node for tests. |
+| `game.js` | Everything currently in the `<script>` block: loop, entities, AI, rounds, skins, input, overlay logic. Calls `Sound.*` and `FX.*`. |
+| `tests/*.test.mjs` | Zero-dependency `node --test` suites for `sw.js`, `fx.js`, `audio.js` (browser APIs stubbed). Not shipped; not in the SW cache list. |
 | `sw.js` | Cache list gains `style.css`, `audio.js`, `game.js`; `CACHE` bumped to `noodle-pit-v2`; fetch handler fixed (see §2.3). |
 | `README.md` | Files section updated; stale `.nojekyll` line removed (or the file added — pick add, it's harmless and matches the docs). |
 
-Script order matters: `audio.js` defines `Sound` before `game.js` runs.
-Both remain IIFEs; `audio.js` assigns `window.Sound`.
+Script order matters: `audio.js` and `fx.js` define `Sound` / `FX` before
+`game.js` runs. All remain IIFEs; `audio.js` assigns `window.Sound`, `fx.js`
+assigns `window.FX`.
 
 No modules (`type="module"`) — keeps `file://` double-click testing working
 and avoids CORS surprises on Pages.
