@@ -17,11 +17,11 @@
   #len { display:inline-block; }
   #len.pop { animation: pop .16s ease-out; }
   @keyframes pop { 0%{transform:scale(1)} 40%{transform:scale(1.35)} 100%{transform:scale(1)} }
-  #boost { position:fixed; z-index:5; touch-action:none; right:22px; bottom:calc(28px + env(safe-area-inset-bottom, 0)); width:78px; height:78px; border-radius:50%; background:var(--coral); color:var(--ink); font-weight:800; font-size:15px; border:0; box-shadow:0 6px 0 #b8362a; display:none; align-items:center; justify-content:center; user-select:none; }
-  #stick { position:fixed; left:22px; bottom:calc(22px + env(safe-area-inset-bottom, 0)); width:150px; height:150px; border-radius:50%; background:rgba(255,255,255,.12); border:3px solid rgba(255,255,255,.35); z-index:5; }
-  #knob { position:absolute; left:50%; top:50%; width:64px; height:64px; margin:-32px 0 0 -32px; border-radius:50%; background:var(--sky); box-shadow:0 4px 0 #2a7fb0; pointer-events:none; }
+  #boost { position:fixed; z-index:5; touch-action:none; right:calc(16px + env(safe-area-inset-right, 0)); bottom:calc(28px + env(safe-area-inset-bottom, 0)); width:66px; height:66px; border-radius:50%; background:var(--coral); color:var(--ink); font-weight:800; font-size:13px; border:0; box-shadow:0 6px 0 #b8362a; display:none; align-items:center; justify-content:center; user-select:none; }
+  #stick { position:fixed; left:calc(16px + env(safe-area-inset-left, 0)); bottom:calc(22px + env(safe-area-inset-bottom, 0)); width:110px; height:110px; border-radius:50%; background:rgba(255,255,255,.12); border:3px solid rgba(255,255,255,.35); z-index:5; }
+  #knob { position:absolute; left:50%; top:50%; width:48px; height:48px; margin:-24px 0 0 -24px; border-radius:50%; background:var(--sky); box-shadow:0 4px 0 #2a7fb0; pointer-events:none; }
   #boost.on { transform:translateY(4px); box-shadow:0 2px 0 #b8362a; }
-  #overlay { position:fixed; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; padding:24px; background:rgba(27,19,48,.88); opacity:0; transform:scale(.96); pointer-events:none; visibility:hidden; transition:opacity .25s ease, transform .25s ease, visibility 0s linear .25s; }
+  #overlay { position:fixed; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; padding:24px; background:rgba(27,19,48,.88); opacity:0; transform:scale(.96); pointer-events:none; visibility:hidden; transition:opacity .25s ease, transform .25s ease, visibility 0s linear .25s; overflow-y:auto; -webkit-overflow-scrolling:touch; }
   #overlay.show { opacity:1; transform:none; pointer-events:auto; visibility:visible; transition-delay:0s; }
   #overlay .score { animation: scoreIn .4s cubic-bezier(.2,.9,.3,1.2); }
   @keyframes scoreIn { from{transform:scale(.4); opacity:0} to{transform:none; opacity:1} }
@@ -29,6 +29,18 @@
   #overlay button:active, .rd:active, .sk:active { transform:translateY(1px); }
   .rd.sel, .sk.sel { box-shadow:0 0 0 3px rgba(201,242,74,.35), 0 0 18px rgba(201,242,74,.35); }
   .sk.lock::after { content:'🔒'; position:absolute; right:-6px; top:-6px; font-size:14px; filter:drop-shadow(0 1px 2px rgba(0,0,0,.6)); }
+  /* overlay content is split into .main (text + primary button) and .side (pickers); they stack in portrait
+     and sit side by side on short landscape screens so nothing is clipped when the phone is sideways */
+  .col { display:flex; flex-direction:column; align-items:center; }
+  @media (orientation: landscape) and (max-height: 500px) {
+    #overlay { flex-direction:row; flex-wrap:wrap; gap:0 32px; padding:12px 24px; }
+    .col { max-width:46%; }
+    #overlay h1 { font-size:34px; }
+    #overlay h1 span { font-size:16px; margin-top:6px; }
+    #overlay .score { font-size:30px; }
+    #overlay p { margin:12px 0 16px; }
+    #skins { max-width:300px; }
+  }
   #overlay h1 { font-size:56px; letter-spacing:-2px; line-height:.95; color:var(--lime); }
   #overlay h1 span { display:block; color:var(--paper); font-size:22px; letter-spacing:0; font-weight:500; margin-top:10px; }
   #overlay p { margin:22px 0 28px; max-width:300px; line-height:1.45; opacity:.9; }

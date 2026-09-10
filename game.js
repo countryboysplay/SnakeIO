@@ -119,28 +119,28 @@ function buildSkinPicker(){
 }
 // overlay screens — one template per screen, one place that shows/hides
 function titleScreen(){
-  return `<h1>Noodle Pit<span>eat, grow, don't get bonked</span></h1>
-  <div id="rounds"></div><div id="skins"></div>
+  return `<div class="col main"><h1>Noodle Pit<span>eat, grow, don't get bonked</span></h1>
   <p>Grow to each round's target as the biggest worm in the pit, then eat the Pit King.</p>
-  <p class="sub">Joystick steers · hold BOOST to speed up (costs length) · bump smaller worms to eat them</p>
+  <p class="sub">Joystick steers · hold BOOST to speed up (costs length) · bump smaller worms to eat them · grab ⚡🛡👻🧲 power-ups</p>
   <button id="start">Play</button>
-  ${standalone ? '' : '<p class="sub" style="margin-top:18px">To install: tap Share, then Add to Home Screen.</p>'}`;
+  ${standalone ? '' : '<p class="sub" style="margin-top:18px">To install: tap Share, then Add to Home Screen.</p>'}</div>
+  <div class="col side"><div id="rounds"></div><div id="skins"></div></div>`;
 }
 function roundClearScreen(){
   const prev = ROUNDS[round-1], next = ROUNDS[round];
-  return `<h1>Round cleared<span>${prev.name} → ${next.name}</span></h1><div class="score" data-count="${player.len}">0</div>
+  return `<div class="col main"><h1>Round cleared<span>${prev.name} → ${next.name}</span></h1><div class="score" data-count="${player.len}">0</div>
   <p>${next.king ? 'Final round: the Pit King is waiting. He\'s length '+KING_LEN+' — outgrow him, then eat him.' : 'Next: reach length '+next.target+' as the biggest worm. Rivals start bigger.'}</p>
-  <div id="skins"></div><button id="start">Next round</button>`;
+  <button id="start">Next round</button></div><div class="col side"><div id="skins"></div></div>`;
 }
 function winScreen(){
-  return `<h1>You rule the pit<span>the King is eaten</span></h1><div class="score" data-count="${player.len}">0</div>
+  return `<div class="col main"><h1>You rule the pit<span>the King is eaten</span></h1><div class="score" data-count="${player.len}">0</div>
   <p>Every round cleared. The pit is yours — keep playing to chase a new best and finish the skins.</p>
-  <div id="skins"></div><button id="start">Play again</button>`;
+  <button id="start">Play again</button></div><div class="col side"><div id="skins"></div></div>`;
 }
 function gameOverScreen(newly){
-  return `<h1>Eaten<span>you grew to</span></h1><div class="score" data-count="${player.len}">0</div>
+  return `<div class="col main"><h1>Eaten<span>you grew to</span></h1><div class="score" data-count="${player.len}">0</div>
   <p>Best ${best} · worms eaten ${eaten}${newly.length?`<br><b style="color:var(--lime)">New skin unlocked: ${newly.map(k=>k.name).join(', ')}</b>`:''}</p>
-  <div id="rounds"></div><div id="skins"></div><button id="start">Retry round ${round+1}</button>`;
+  <button id="start">Retry round ${round+1}</button></div><div class="col side"><div id="rounds"></div><div id="skins"></div></div>`;
 }
 function countUp(el, to){
   const t0 = performance.now(), dur = 400;
@@ -167,10 +167,10 @@ function hideOverlay(){
 const pauseBtn = document.getElementById('pause');
 let paused = false;
 function pauseScreen(){
-  return `<h1>Paused<span>Round ${round+1} · ${ROUNDS[round].name}</span></h1>
+  return `<div class="col main"><h1>Paused<span>Round ${round+1} · ${ROUNDS[round].name}</span></h1>
   <p>Length ${player.len}</p>
   <button id="resume">Resume</button>
-  <p><button id="quit" style="background:transparent;color:var(--paper);border:2px solid rgba(255,255,255,.35);margin-top:8px">Quit to menu</button></p>`;
+  <p><button id="quit" style="background:transparent;color:var(--paper);border:2px solid rgba(255,255,255,.35);margin-top:8px">Quit to menu</button></p></div>`;
 }
 function pause(){
   if (!running || paused) return;
@@ -446,7 +446,7 @@ function start(){ Sound.play('tap'); unlockedBefore=new Set(SKINS.filter(k=>k.ne
 // joystick in bottom-left: direction from stick center to finger
 const stick=document.getElementById('stick'), knob=document.getElementById('knob');
 let steerId=null;
-function stickPos(t){ const r=stick.getBoundingClientRect(); const cx=r.left+r.width/2, cy=r.top+r.height/2; let dx=t.clientX-cx, dy=t.clientY-cy; const d=Math.hypot(dx,dy); if(d>6) steer=Math.atan2(dy,dx); const m=Math.min(d,r.width/2-32); const a=Math.atan2(dy,dx); knob.style.transform=`translate(${Math.cos(a)*m}px,${Math.sin(a)*m}px)`; }
+function stickPos(t){ const r=stick.getBoundingClientRect(); const cx=r.left+r.width/2, cy=r.top+r.height/2; let dx=t.clientX-cx, dy=t.clientY-cy; const d=Math.hypot(dx,dy); if(d>6) steer=Math.atan2(dy,dx); const m=Math.min(d,r.width/2-24); const a=Math.atan2(dy,dx); knob.style.transform=`translate(${Math.cos(a)*m}px,${Math.sin(a)*m}px)`; }
 stick.addEventListener('touchstart', e=>{ e.preventDefault(); if(steerId===null){ const t=e.changedTouches[0]; steerId=t.identifier; stickPos(t); } }, {passive:false});
 stick.addEventListener('touchmove', e=>{ e.preventDefault(); for(const t of e.changedTouches) if(t.identifier===steerId) stickPos(t); }, {passive:false});
 const endT=e=>{ for(const t of e.changedTouches) if(t.identifier===steerId){ steerId=null; knob.style.transform=''; } };
