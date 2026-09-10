@@ -97,7 +97,9 @@ for (let r = 0; r < 5; r++) {
 }
 ```
 
-- [ ] **Step 3: Run baseline** — `node --check game.js && node --test` (green, 27) then `node tools/balance-sim.mjs 20`. Paste the table into spec §4.4 "Baseline" column (frames; note clear %).
+- [ ] **Step 3: Run baseline** — `node --check game.js && node --test` (green, 27) then `node tools/balance-sim.mjs 20`. Paste the table into spec §4.4 "Baseline" column.
+
+> **Deviation (found while executing):** "frames to clear" is unusable as a metric — the autopilot dies within ~200–400 frames in rounds 2+ (rivals start far bigger than the length-10 player) so clear% was 25/0/0/0/0. The sim now measures **frames for the player to reach the round's target length with a debug-only invincibility flag** (`NoodleDebug.setGodMode`, honoured in `kill()`), plus length gained per 1000 frames. That isolates growth rate, which is exactly what food tiers, power-ups and `PACE` change. `state()` also exposes `target`.
 
 - [ ] **Step 4: Commit**
 

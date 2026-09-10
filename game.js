@@ -186,7 +186,7 @@ addEventListener('keydown', e=>{ if((e.code==='Escape' || e.code==='KeyP') && !e
 document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='hidden' && running) pause(); });
 
 let worms = [], food = [], player, running = false, steer = null, boosting = false, cam = {x:0,y:0}, tick = 0;
-let playerHitWall = false;
+let playerHitWall = false, godMode = false;
 
 function rnd(a,b){ return a + Math.random()*(b-a); }
 function mkFood(x,y,v){ if(food.length>900) return; food.push({x, y, v: v||1, c: PALETTE[Math.random()*PALETTE.length|0], r: 3+(v||1)*1.5}); }
@@ -211,6 +211,7 @@ function reset(){
   lastLen = player.len; lenEl.textContent = player.len;
 }
 function kill(s, by){
+  if (s===player && godMode){ playerHitWall = false; const d=Math.hypot(s.x,s.y); if (d>ARENA-20){ s.x*=(ARENA-20)/d; s.y*=(ARENA-20)/d; } return; }
   s.dead = true;
   for (let i=0;i<s.pts.length;i+=2){ const p=s.pts[i]; mkFood(p.x+rnd(-4,4), p.y+rnd(-4,4), 2); }
   FX.burst(s.x, s.y, Math.min(24, 12 + (s.len/12|0)), s.c, { speed: 3.5, life: 36, r: 3 });
@@ -368,6 +369,14 @@ const bOn=e=>{ e.preventDefault(); boosting=true; boostBtn.classList.add('on'); 
 boostBtn.addEventListener('touchstart', bOn, {passive:false});
 boostBtn.addEventListener('pointerdown', bOn); boostBtn.addEventListener('pointerup', bOff); boostBtn.addEventListener('pointercancel', bOff); boostBtn.addEventListener('pointerleave', bOff);
 addEventListener('keydown', e=>{ if(e.code==='Space'){ e.preventDefault(); boosting=true; } }); addEventListener('keyup', e=>{ if(e.code==='Space') boosting=false; });
+
+// read-only debug hook for the headless smoke tests and tools/balance-sim.mjs
+window.NoodleDebug = {
+  state: () => ({ worms, food, player, round, tick, running, paused, target: ROUNDS[round].king ? KING_LEN : ROUNDS[round].target }),
+  steer: a => { steer = a; },
+  setRound: i => { round = i; },
+  setGodMode: b => { godMode = !!b; },   // sim only: measure growth without the autopilot's deaths
+};
 
 reset(); showOverlay(titleScreen()); loop();
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(()=>{});

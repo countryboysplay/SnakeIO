@@ -192,15 +192,18 @@ Apple max 2 and 1 % weight; magnet radius 140 px; one pickup at a time,
 
 ### 4.4 Results
 
-*Filled in during implementation:*
+Metric: median frames for an invincible greedy autopilot to reach the round's
+target length (`node tools/balance-sim.mjs 20`). "Frames to clear" was tried
+first and rejected — the autopilot dies too early in rounds 2+ for it to
+measure anything but its own dodging.
 
-| Round | Baseline median frames | New (PACE=…) | Δ |
-|-------|------------------------|--------------|---|
-| 1 | | | |
-| 2 | | | |
-| 3 | | | |
-| 4 | | | |
-| King | | | |
+| Round | Target (old) | Baseline median frames | len/1000 f | Target (new) | New (PACE=…) | Δ |
+|-------|--------------|------------------------|------------|--------------|--------------|---|
+| 1 | 40 | 2042 | 18.8 | | | |
+| 2 | 80 | 3387 | 22.4 | | | |
+| 3 | 130 | 2949 | 52.0 | | | |
+| 4 | 200 | 3128 | 64.2 | | | |
+| King | 320 | 3083 | 53.0 | | | |
 
 ## 5. Landscape & controls
 
