@@ -11,6 +11,7 @@ const body = html.slice(html.indexOf('<body>') + 6, html.indexOf('<script'));
 const dom = installDom({ html: body });
 loadScript('audio.js');
 loadScript('fx.js');
+loadScript('items.js');
 loadScript('game.js');
 
 test('boots to the title screen and renders idle frames without errors', () => {
