@@ -27,7 +27,7 @@
   Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>
   Claude-Session: https://claude.ai/code/session_01D1cdBkAH34VGswPpCV6FYm
   ```
-- Run all tests with `node --test tests/` from the repo root. Manual browser checks: `python -m http.server 8080` in the repo root, open `http://localhost:8080/`, DevTools device toolbar at 390×844 (iPhone 14).
+- Run all tests with `node --test` from the repo root. Manual browser checks: `python -m http.server 8080` in the repo root, open `http://localhost:8080/`, DevTools device toolbar at 390×844 (iPhone 14).
 
 ---
 
@@ -152,7 +152,7 @@ test('falls back to cache when fetch rejects (offline)', async () => {
 
 - [ ] **Step 3: Run tests to verify they fail**
 
-Run: `node --test tests/`
+Run: `node --test`
 Expected: test 1 FAILS (`waits.length` is 0 — current handler never calls `waitUntil`); test 2 FAILS (`putCalls` contains the 404); test 3 passes.
 
 - [ ] **Step 4: Fix the fetch handler**
@@ -178,7 +178,7 @@ self.addEventListener('fetch', e => {
 
 - [ ] **Step 5: Run tests to verify they pass**
 
-Run: `node --test tests/`
+Run: `node --test`
 Expected: 3 passing.
 
 - [ ] **Step 6: Commit**
@@ -290,7 +290,7 @@ In `README.md`, replace lines 19–29 (the `## Files` section through the stray 
 - `manifest.webmanifest` — makes it installable (fullscreen, portrait, icon)
 - `icon-*.png`, `apple-touch-icon.png` — home-screen icons
 - `.nojekyll` — tells Pages to serve files as-is
-- `tests/` — `node --test tests/` runs the unit tests (not shipped)
+- `tests/` — `node --test` runs the unit tests (not shipped)
 
 ## Shipping an update
 
@@ -299,7 +299,7 @@ After changing any shipped file, bump `CACHE` in `sw.js` (e.g. `noodle-pit-v3`) 
 
 - [ ] **Step 6: Syntax-check and run tests**
 
-Run: `node --check game.js && node --test tests/`
+Run: `node --check game.js && node --test`
 Expected: no syntax error; 3 passing.
 
 - [ ] **Step 7: Browser smoke test**
@@ -364,7 +364,7 @@ In `style.css` change `#hud`'s `justify-content:space-between` rule so three ite
 
 - [ ] **Step 3: Verify**
 
-Run: `node --check game.js && node --test tests/` → passes.
+Run: `node --check game.js && node --test` → passes.
 
 Browser (`http://localhost:8080/`):
 1. DevTools → Application → Local Storage → `http://localhost:8080`. Initially empty.
@@ -496,7 +496,7 @@ test('draw helpers run against a minimal ctx without throwing', () => {
 
 - [ ] **Step 2: Run to verify failure**
 
-Run: `node --test tests/fx.test.mjs`
+Run: `node --testfx.test.mjs`
 Expected: every test FAILS (`FX` is undefined — `fx.js` is empty).
 
 - [ ] **Step 3: Implement `fx.js`**
@@ -575,7 +575,7 @@ Expected: every test FAILS (`FX` is undefined — `fx.js` is empty).
 
 - [ ] **Step 4: Run tests**
 
-Run: `node --test tests/`
+Run: `node --test`
 Expected: all fx + sw tests pass (12 total).
 
 - [ ] **Step 5: Commit**
@@ -717,7 +717,7 @@ FX.confetti(W/2, H*0.45, 60, PALETTE);
 
 - [ ] **Step 8: Verify**
 
-Run: `node --check game.js && node --test tests/` → passes.
+Run: `node --check game.js && node --test` → passes.
 
 Browser at 390×844 and desktop:
 1. Eat pellets: 3 tiny particles per pellet in pellet colour; Length number pops.
@@ -864,7 +864,7 @@ test('eat SFX is throttled to 8 within 100 ms', () => {
 
 - [ ] **Step 2: Run to verify failure**
 
-Run: `node --test tests/audio.test.mjs`
+Run: `node --testaudio.test.mjs`
 Expected: all FAIL (`Sound` undefined).
 
 - [ ] **Step 3: Implement `audio.js`**
@@ -1039,7 +1039,7 @@ Expected: all FAIL (`Sound` undefined).
 
 - [ ] **Step 4: Run tests**
 
-Run: `node --test tests/`
+Run: `node --test`
 Expected: all pass (20 total). The process must exit on its own — if it hangs, a music timer wasn't cleared by `music('off')`.
 
 - [ ] **Step 5: Commit**
@@ -1114,7 +1114,7 @@ document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState=
 
 - [ ] **Step 5: Verify**
 
-Run: `node --check game.js && node --test tests/` → passes.
+Run: `node --check game.js && node --test` → passes.
 
 Browser (desktop, then phone emulation; on a real iPhone if available):
 1. Load page: silence. Tap Play: music starts on that same tap (no second tap needed), then play-mode pad with a soft pulse.
@@ -1230,7 +1230,7 @@ function hideOverlay(){ overlay.classList.remove('show'); boostBtn.style.display
 
 - [ ] **Step 5: Verify**
 
-Run: `node --check game.js && node --test tests/` → passes.
+Run: `node --check game.js && node --test` → passes.
 
 Browser:
 1. Load: title screen fades/scales in; install hint visible in a normal tab, hidden when DevTools emulates standalone (Application → Manifest → "display-mode" or by adding to home screen on a phone).
@@ -1310,7 +1310,7 @@ Show/hide the pause button with the boost button: in `showOverlay` next to `boos
 
 - [ ] **Step 3: Verify**
 
-Run: `node --check game.js && node --test tests/` → passes.
+Run: `node --check game.js && node --test` → passes.
 
 Browser:
 1. During play the ⏸ button is visible; on overlays it's hidden.
@@ -1364,12 +1364,12 @@ Replace the `## Controls` section with:
 ## Development
 
 No build step. Serve the folder (`python -m http.server 8080`) and open `http://localhost:8080/`.
-Unit tests for the service worker, audio and FX modules: `node --test tests/`.
+Unit tests for the service worker, audio and FX modules: `node --test`.
 ```
 
 - [ ] **Step 3: Full regression**
 
-Run: `node --check game.js && node --test tests/` → all pass.
+Run: `node --check game.js && node --test` → all pass.
 
 Browser, phone emulation 390×844, then desktop:
 1. Hard-reload twice; Application → Cache Storage shows only `noodle-pit-v2` containing `style.css`, `audio.js`, `fx.js`, `game.js`.
