@@ -1,7 +1,10 @@
 // Headless balance sim: runs the real game with a greedy, invincible autopilot and reports how many
 // frames the player needs to reach each round's target length (King round: KING_LEN). Growth rate is
 // what food tiers / power-ups / PACE change; survival is left out so the crude autopilot doesn't skew it.
-// Usage: node tools/balance-sim.mjs [runs=20] [maxFrames=20000] [pace]   (pace overrides PACE in game.js)
+// Usage: node tools/balance-sim.mjs [runs=20] [maxFrames=20000] [pace] [legacy]
+//   pace   — overrides PACE in game.js
+//   legacy — approximates the pre-tier game: every spawn is a crumb and no power-ups ever appear
+//            (food density still follows the current 260/280 counts, so it reads slightly slower than the old 350/380)
 import fs from 'node:fs';
 import { loadScript } from '../tests/load.mjs';
 import { installDom } from '../tests/dom-stub.mjs';
@@ -11,7 +14,10 @@ if (process.argv[4]) globalThis.NOODLE_PACE = +process.argv[4];
 const html = fs.readFileSync(new URL('../index.html', import.meta.url), 'utf8');
 const body = html.slice(html.indexOf('<body>') + 6, html.indexOf('<script'));
 const dom = installDom({ html: body });
-for (const f of ['audio.js', 'fx.js', 'items.js', 'game.js']) if (fs.existsSync(new URL('../' + f, import.meta.url))) loadScript(f);
+const legacy = process.argv[5] === 'legacy';
+for (const f of ['audio.js', 'fx.js', 'items.js']) if (fs.existsSync(new URL('../' + f, import.meta.url))) loadScript(f);
+if (legacy && globalThis.Items) { globalThis.Items.pickFood = () => 'crumb'; globalThis.Items.PICKUP.first = 1e9; }
+loadScript('game.js');
 const D = globalThis.NoodleDebug, ARENA = 2200;
 
 // Same instincts as the rivals: richest-nearest food, turn back near the wall, dodge bigger bodies ahead.
@@ -41,7 +47,7 @@ function runRound(r) {
   return { frames: maxFrames, reached: false, len: D.state().player.len, target };
 }
 const median = a => { const s = [...a].sort((x, y) => x - y); return s[s.length >> 1]; };
-console.log(`runs=${runs} maxFrames=${maxFrames} pace=${globalThis.NOODLE_PACE || 'default'}`);
+console.log(`runs=${runs} maxFrames=${maxFrames} pace=${globalThis.NOODLE_PACE || 'default'}${legacy ? ' LEGACY FOOD, NO POWER-UPS' : ''}`);
 console.log('round  target  reached%  median frames to target  median len/1000f');
 for (let r = 0; r < 5; r++) {
   const res = []; for (let i = 0; i < runs; i++) res.push(runRound(r));

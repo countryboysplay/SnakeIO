@@ -126,5 +126,29 @@ test('power-ups: collect → effect + HUD pill; magnet pulls; speed suspends dra
   assert.equal(st.player.dead, false, 'shield saves from the wall');
   assert.equal(st.effects.has('shield'), false, 'shield is consumed');
   assert.ok(Math.hypot(st.player.x, st.player.y) <= 2200 && st.running, 'player is back inside and still running');
+  assert.ok(st.effects.has('ghost'), 'a shield save phases the player out briefly');
   dom.fireWindow('keydown', { code: 'KeyP' }); dom.el('quit').onclick(); dom.frame(2);
+});
+
+test('shield saves from a worm bite without feeding the attacker; buffs clear on game over', () => {
+  const D = globalThis.NoodleDebug;
+  dom.el('start').onclick(); dom.frame(2);
+  D.spawnPickup('shield'); dom.frame(1);
+  let st = D.state();
+  // park a much bigger rival's head inside the player's body
+  const rival = st.worms.find(w => w.ai && !w.dead), body = st.player.pts[3];
+  rival.len = 100; rival.x = body.x; rival.y = body.y; rival.pts[0] = { x: body.x, y: body.y };
+  dom.frame(1);
+  st = D.state();
+  assert.equal(st.player.dead, false, 'shield absorbs the bite');
+  assert.equal(st.effects.has('shield'), false, 'shield consumed');
+  assert.equal(rival.len, 100, 'the biter is not credited with a meal');
+  dom.frame(3);
+  assert.equal(D.state().player.dead, false, 'ghost grace stops the re-bite on the following frames');
+  // now die for real (wall) and confirm the HUD pills are gone
+  D.spawnPickup('magnet'); dom.frame(1); assert.ok(dom.el('buffs').innerHTML.includes('🧲'));
+  const p = D.state().player; p.x = 2190; p.y = 0; p.ang = 0; D.steer(0); dom.frame(60);
+  st = D.state();
+  assert.equal(st.running, false, 'run ended');
+  assert.equal(dom.el('buffs').innerHTML, '', 'buff pills cleared on game over');
 });

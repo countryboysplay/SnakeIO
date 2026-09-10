@@ -20,7 +20,7 @@ function lenPop(){ lenEl.classList.remove('pop'); void lenEl.offsetWidth; lenEl.
 const buffsEl = document.getElementById('buffs'); let buffKeys = '';
 function renderBuffs(force){
   const act = effects.active(), keys = act.map(a=>a.kind).join(',');
-  if (force || keys !== buffKeys){ buffKeys = keys; buffsEl.innerHTML = act.map(a=>`<span class="buff" style="--c:${Items.POWERUPS[a.kind].c}"><i>${Items.POWERUPS[a.kind].glyph}</i><b class="bar"></b></span>`).join(''); }
+  if (force || keys !== buffKeys){ buffKeys = keys; buffsEl.innerHTML = act.map(a=>`<span class="buff" style="--c:${Items.POWERUPS[a.kind].c}"><i>${Items.POWERUPS[a.kind].glyph}</i><b class="bar" style="width:${Math.round(a.frac*100)}%"></b></span>`).join(''); }
   if (force || tick%6===0){ const bars = buffsEl.querySelectorAll('.bar'); act.forEach((a,i)=>{ if (bars[i]) bars[i].style.width = Math.round(a.frac*100)+'%'; }); }
 }
 const overlay = document.getElementById('overlay'), boostBtn = document.getElementById('boost');
@@ -43,6 +43,7 @@ const ROUNDS = [
   {target:0,   rivals:10, rivalLen:[30,90],  name:'The Pit King', king:true},
 ].map(r => ({ ...r, target: Math.round(r.target*PACE), rivalLen: r.rivalLen.map(n => Math.round(n*PACE)) }));
 const KING_LEN = Math.round(320*PACE);
+const L = n => Math.round(n*PACE);   // any other length-denominated tuning value (skin unlocks) scales the same way
 let round = 0, maxRound = +store.get('noodleRound') || 0, king = null;
 const goalEl=document.getElementById('goal'), roundNumEl=document.getElementById('roundNum'), roundNameEl=document.getElementById('roundName');
 function buildRoundPicker(){
@@ -52,19 +53,19 @@ function buildRoundPicker(){
 }
 const SKINS = [
   {id:'lime',   name:'Lime',     c:'#c9f24a', type:'solid',  need:()=>true,        label:'free'},
-  {id:'coral',  name:'Coral',    c:'#ff5d4a', type:'solid',  need:()=>best>=30,    label:'reach length 30'},
+  {id:'coral',  name:'Coral',    c:'#ff5d4a', type:'solid',  need:()=>best>=L(30),    label:'reach length '+L(30)},
   {id:'sky',    name:'Sky bands',c:'#5cc8ff', c2:'#1b1330', type:'bands', need:()=>eaten>=3, label:'eat 3 worms'},
-  {id:'bee',    name:'Bumble',   c:'#ffd23f', c2:'#1b1330', type:'bands', need:()=>best>=60,    label:'reach length 60'},
+  {id:'bee',    name:'Bumble',   c:'#ffd23f', c2:'#1b1330', type:'bands', need:()=>best>=L(60),    label:'reach length '+L(60)},
   {id:'spots',  name:'Cheetah',  c:'#ffb347', c2:'#7a3e00', type:'spots', need:()=>eaten>=10,label:'eat 10 worms'},
-  {id:'candy',  name:'Candy',    c:'#ff7ad9', c2:'#fff', type:'bands', need:()=>best>=100, label:'reach length 100'},
+  {id:'candy',  name:'Candy',    c:'#ff7ad9', c2:'#fff', type:'bands', need:()=>best>=L(100), label:'reach length '+L(100)},
   {id:'rainbow',name:'Rainbow',  c:'#fff', type:'rainbow', need:()=>eaten>=25, label:'eat 25 worms'},
-  {id:'ghost',  name:'Ghost',    c:'#e9e4ff', type:'glow',  need:()=>best>=200, label:'reach length 200'},
+  {id:'ghost',  name:'Ghost',    c:'#e9e4ff', type:'glow',  need:()=>best>=L(200), label:'reach length '+L(200)},
 ];
 function skinOf(id){ return SKINS.find(k=>k.id===id) || SKINS[0]; }
 function hue(i){ return `hsl(${(i*9)%360},90%,60%)`; }
 // draw a worm: tapered segmented body from tail to head
 function shade(hex,amt){ const n=parseInt(hex.slice(1),16); let r=(n>>16)+amt,g=((n>>8)&255)+amt,b=(n&255)+amt; r=Math.max(0,Math.min(255,r));g=Math.max(0,Math.min(255,g));b=Math.max(0,Math.min(255,b)); return '#'+((r<<16)|(g<<8)|b).toString(16).padStart(6,'0'); }
-function paintBody(pts, r, skin, boost, ang, hx, hy, squash){
+function paintBody(pts, r, skin, boost, ang, hx, hy, squash, alpha=1){
   const n=pts.length; if(n<2) return;
   if (boost){
     // speed lines fanning out behind the head
@@ -72,16 +73,16 @@ function paintBody(pts, r, skin, boost, ang, hx, hy, squash){
     ctx.strokeStyle = skin.c; ctx.lineWidth = 2;
     for (let k=0;k<5;k++){
       const a = ang + Math.PI + (k-2)*0.22 + rnd(-0.05,0.05), L = r*(2+Math.random()*3);
-      ctx.globalAlpha = 0.5*(1-Math.abs(k-2)/3);
+      ctx.globalAlpha = 0.5*(1-Math.abs(k-2)/3)*alpha;
       ctx.beginPath(); ctx.moveTo(bx,by); ctx.lineTo(bx+Math.cos(a)*L, by+Math.sin(a)*L); ctx.stroke();
     }
-    ctx.globalAlpha = .18 + .1*Math.sin(tick/3);
+    ctx.globalAlpha = (.18 + .1*Math.sin(tick/3))*alpha;
     ctx.fillStyle = skin.c; for(let i=n-1;i>=0;i-=2){ ctx.beginPath(); ctx.arc(pts[i].x,pts[i].y,r*1.7,0,Math.PI*2); ctx.fill(); }
-    ctx.globalAlpha = 1;
+    ctx.globalAlpha = alpha;
   } else if (skin.type==='glow'){
-    ctx.globalAlpha=.25; ctx.fillStyle=skin.c; for(let i=n-1;i>=0;i-=2){ ctx.beginPath(); ctx.arc(pts[i].x,pts[i].y,r*1.7,0,Math.PI*2); ctx.fill(); } ctx.globalAlpha=1;
+    ctx.globalAlpha=.25*alpha; ctx.fillStyle=skin.c; for(let i=n-1;i>=0;i-=2){ ctx.beginPath(); ctx.arc(pts[i].x,pts[i].y,r*1.7,0,Math.PI*2); ctx.fill(); } ctx.globalAlpha=alpha;
   }
-  if (skin.type==='glow') ctx.globalAlpha=.85;
+  if (skin.type==='glow') ctx.globalAlpha=.85*alpha;
   const dark = skin.type==='rainbow' ? null : shade(skin.c,-70);
   for (let i=n-1;i>=0;i--){
     const t=i/n, ri = r*(0.35+0.65*Math.pow(1-t,0.6)) * (i<3?1.12+0.15*(squash||0):1);
@@ -97,7 +98,7 @@ function paintBody(pts, r, skin, boost, ang, hx, hy, squash){
     // dorsal highlight
     ctx.fillStyle='rgba(255,255,255,.28)'; ctx.beginPath(); ctx.arc(p.x-ri*.25,p.y-ri*.35,ri*.3,0,Math.PI*2); ctx.fill();
   }
-  ctx.globalAlpha=1;
+  ctx.globalAlpha=alpha;
   // clitellum (the thicker saddle worms have) a little way behind the head
   if (n>16){ const p=pts[12]; ctx.fillStyle=shade(skin.type==='rainbow'?'#ff9a6a':skin.c,35); ctx.beginPath(); ctx.arc(p.x,p.y,r*1.05,0,Math.PI*2); ctx.fill(); ctx.strokeStyle='rgba(0,0,0,.25)'; ctx.lineWidth=1.5; ctx.stroke(); }
   // mouth
@@ -174,7 +175,7 @@ function pauseScreen(){
 }
 function pause(){
   if (!running || paused) return;
-  paused = true; running = false; boosting = false; player.boost = 0; Sound.boost(false);
+  paused = true; running = false; boosting = false; player.boost = 0; player.fast = false; Sound.boost(false);
   showOverlay(pauseScreen());
   overlay.querySelector('#resume').onclick = ()=>{ Sound.play('tap'); resume(); };
   overlay.querySelector('#quit').onclick = ()=>{ Sound.play('tap'); quitToMenu(); };
@@ -206,9 +207,11 @@ function spawnPickup(kind, x, y){
   if (x==null){ for (let t=0;t<10;t++){ const a=rnd(0,Math.PI*2), r=rnd(200,ARENA-200); x=Math.cos(a)*r; y=Math.sin(a)*r; if (Math.hypot(x-player.x,y-player.y)>=Items.PICKUP.minDist) break; } }
   pickups.push({ x, y, kind: kind || Items.pickPowerup(), born: tick });
 }
-// the shield absorbs one fatal hit: bounce, shed 10% length, pull back inside the arena
+// the shield absorbs one fatal hit: bounce, shed 10% length, pull back inside the arena, and phase out
+// for ~0.75 s so the worm you're overlapping can't bite again on the very next frame
 function shieldSave(){
   effects.consume('shield'); playerHitWall = false;
+  if (!effects.has('ghost')) effects.add('ghost', 45);
   player.ang += Math.PI; player.len = Math.max(6, Math.floor(player.len*0.9));
   const d = Math.hypot(player.x,player.y); if (d > ARENA-20){ player.x *= (ARENA-20)/d; player.y *= (ARENA-20)/d; }
   FX.shake(8,12); FX.burst(player.x,player.y,24,'#c9f24a',{speed:4,life:24,r:2.5}); Sound.play('shieldHit');
@@ -304,35 +307,40 @@ function update(){
       s.boost = Math.random()<.01 ? 30 : Math.max(0,(s.boost||0)-1);
     } else {
       target = steer==null ? s.ang : steer;
-      const wasBoost = !!s.boost; s.boost = boosting && s.len>6 ? 1 : 0;
-      if (!!s.boost !== wasBoost) Sound.boost(!!s.boost);
+      // "fast" = boosting or the speed buff; camera, hum, banner and speed lines all key off it
+      const wasFast = !!s.fast; s.boost = boosting && s.len>6 ? 1 : 0; s.fast = !!(s.boost || effects.has('speed'));
+      if (s.fast !== wasFast) Sound.boost(s.fast);
     }
     let d = target - s.ang; d = Math.atan2(Math.sin(d), Math.cos(d));
     s.ang += Math.max(-0.11, Math.min(0.11, d));
     s.turn = Math.abs(Math.max(-0.11, Math.min(0.11, d)))/0.11;
-    const speedBuff = s===player && effects.has('speed');
-    const sp = BASE_SPEED * (s.boost || speedBuff ? 2.2 : 1);
+    const speedBuff = s===player && effects.has('speed'), fast = s.ai ? !!s.boost : !!s.fast;
+    const sp = BASE_SPEED * (fast ? 2.2 : 1);
     if (s.boost && !speedBuff && tick%10===0 && s.len>6){ s.len--; const t=s.pts[s.pts.length-1]; mkFood(t.x,t.y,'crumb'); }
     s.x += Math.cos(s.ang)*sp; s.y += Math.sin(s.ang)*sp;
     // arena wall
     if (Math.hypot(s.x,s.y) > ARENA){ if (s===player) playerHitWall = true; kill(s, null); continue; }
     s.pts.unshift({x:s.x,y:s.y});
-    const maxPts = Math.min(600, Math.floor(s.len * 1.6));
+    const maxPts = Math.min(Math.round(600*PACE), Math.floor(s.len * 1.6));
     while (s.pts.length > maxPts) s.pts.pop();
     // eat
     const r = radius(s)+6;
     for (let i=food.length-1;i>=0;i--){ const f=food[i]; if((f.x-s.x)**2+(f.y-s.y)**2 < r*r){ s.len += f.v; if (s===player){ FX.burst(f.x, f.y, 3 + (f.v/2|0), f.c, { speed: 1.8 + f.v*0.15, life: 15, r: 1.8 }); Sound.play('eat', f.v); if (f.kind==='apple') Sound.play('apple'); } eatFood(i); } }
   }
-  // collisions (head into other body); a ghosted player is skipped both ways
-  const ghost = effects.has('ghost');
+  // collisions (head into other body); a ghosted player is skipped both ways — checked per pair, not cached,
+  // because a shield save mid-loop grants ghost and the reverse pair (rival head → player body) must see it
   for (const s of worms){
     if (s.dead) continue;
     const r = radius(s);
     for (const o of worms){
-      if (o===s||o.dead||(ghost&&(s===player||o===player))) continue;
+      if (o===s||o.dead||((s===player||o===player)&&effects.has('ghost'))) continue;
       const orr = radius(o), rr=(r+orr)*(r+orr);
       for (let i=0;i<o.pts.length;i+=2){ const p=o.pts[i]; if((p.x-s.x)**2+(p.y-s.y)**2<rr){
-        if (s.len < o.len) kill(s, o);                    // ran into something bigger: you're done
+        // would this contact kill the player? (head into a bigger body, or a bigger head into the player's body)
+        const playerDies = (s===player && s.len < o.len) || (o===player && s.len >= o.len);
+        if (playerDies && godMode) {}                                       // sim: no bite in either direction
+        else if (playerDies && effects.has('shield')) shieldSave();         // shield: no bite in either direction
+        else if (s.len < o.len) kill(s, o);                                 // ran into something bigger: you're done
         else { s.len += Math.ceil(o.len/2); if(s===player){ eaten++; store.set('noodleEaten',eaten); Sound.play('eatWorm', o.len); } kill(o, s); }   // bit something smaller: you eat it
         break; } }
       if (s.dead) break;
@@ -345,7 +353,7 @@ function update(){
     if (R.king){ if (king && king.dead) roundWin(); }
     else if (player.len>=R.target && worms.every(o=>o.dead||o===player||o.len<player.len)) roundWin();
   }
-  const camK = player.boost ? 0.18 : 0.12;
+  const camK = player.fast ? 0.18 : 0.12;
   cam.x += (player.x-cam.x)*camK; cam.y += (player.y-cam.y)*camK;
   FX.update();
   if (player.len !== lastLen){ if (player.len > lastLen) lenPop(); lastLen = player.len; lenEl.textContent = player.len; }
@@ -400,8 +408,8 @@ function draw(){
     if (s.dead) continue;
     const r = radius(s);
     if (s!==player && s.pts.every(p=>Math.abs(p.x-cam.x)>W/2+40||Math.abs(p.y-cam.y)>H/2+40)) continue;
-    if (s===player && effects.has('ghost')) ctx.globalAlpha=.5;
-    paintBody(s.pts, r, s.skin || {c:s.c,type:'solid'}, s.boost || (s===player && effects.has('speed')), s.ang, s.x, s.y, s.turn);
+    const alpha = s===player && effects.has('ghost') ? .5 : 1; ctx.globalAlpha = alpha;
+    paintBody(s.pts, r, s.skin || {c:s.c,type:'solid'}, s.ai ? s.boost : s.fast, s.ang, s.x, s.y, s.turn, alpha);
     // eyes
     const ex=Math.cos(s.ang+Math.PI/2)*r*.5, ey=Math.sin(s.ang+Math.PI/2)*r*.5, fx=Math.cos(s.ang)*r*.35, fy=Math.sin(s.ang)*r*.35;
     ctx.fillStyle='#fff';
@@ -419,14 +427,14 @@ function draw(){
   }
   ctx.restore();
   FX.drawScreen(ctx, W, H);
-  if (running && player.boost){ ctx.fillStyle='rgba(255,93,74,.9)'; ctx.font='bold 16px sans-serif'; ctx.textAlign='center'; ctx.fillText('BOOSTING', W/2, H-40); }
+  if (running && player.fast){ ctx.fillStyle='rgba(255,93,74,.9)'; ctx.font='bold 16px sans-serif'; ctx.textAlign='center'; ctx.fillText('BOOSTING', W/2, H-40); }
   // steering indicator
 }
 
 function loop(){ if(running) update(); else FX.update(); draw(); requestAnimationFrame(loop); }
 let unlockedBefore=new Set();
 function roundWin(){
-  running=false; Sound.boost(false); Sound.play('roundWin');
+  running=false; Sound.boost(false); Sound.play('roundWin'); effects.clear(); renderBuffs(true);
   FX.flash('rgba(201,242,74,.30)', 3);
   FX.confetti(W/2, H*0.45, 60, PALETTE);
   if (player.len>best){ best=player.len; store.set('noodleBest',best); bestEl.textContent=best; }
@@ -436,7 +444,7 @@ function roundWin(){
   showOverlay(last ? winScreen() : roundClearScreen());
 }
 function gameOver(){
-  running=false; Sound.boost(false); Sound.play(playerHitWall ? 'wall' : 'death');
+  running=false; Sound.boost(false); Sound.play(playerHitWall ? 'wall' : 'death'); effects.clear(); renderBuffs(true);
   if (player.len>best){ best=player.len; store.set('noodleBest',best); bestEl.textContent=best; }
   const newly = SKINS.filter(k=>k.need() && !unlockedBefore.has(k.id)); if (newly.length) Sound.play('unlock');
   showOverlay(gameOverScreen(newly));

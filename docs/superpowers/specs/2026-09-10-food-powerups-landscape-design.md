@@ -210,10 +210,27 @@ Sweep (30 runs): PACE 1.2 → 2600 / 2894 / 2588 / 4050 / 2944; PACE 1.3 →
 roughly ±15 %, and rivals scale with PACE (they get eaten by the invincible
 autopilot), so growth time does not scale linearly with target.
 
-**Decision: PACE = 1.5.** Rounds 1–2 and the King stay within the ±15 % band;
-rounds 3–4 run ~25–30 % longer on purpose — the sim measures growth only, and
-the shield/ghost survival buffs (no restarts) make real advancement faster
-than any growth metric shows. Round 1 remains a warm-up. Re-tune after the
+**Correction (post code-review).** The first sim's god-mode let rivals farm
+the invincible player (a bite credited the biter every frame), inflating rival
+sizes and distorting every number above. God-mode is now a pair-skip at the
+collision site, and the sim gained a `legacy` flag (all crumbs, no power-ups)
+for a fair baseline. Corrected numbers (30 runs each):
+
+| Round | Legacy food, PACE 1 (fair baseline) | New food + power-ups, PACE 1 | PACE 1.3 | **PACE 1.5** |
+|-------|------------------------------------|------------------------------|----------|--------------|
+| 1 | 1530 | 1202 (−21 %) | 1588 (+4 %) | 1831 (+20 %) |
+| 2 | 1720 | 2310 | 2494 | 2445 |
+| 3 | 2293 | 2244 | 2275 | 2037 |
+| 4 | 1531 | 2178 | 2071 | 3436 |
+| King | 3546 | 3809 | 3199 | 4088 |
+
+Round 1 is the only clean signal (few, small rivals); rounds 2+ swing ±40 %
+run-to-run because the autopilot's growth there is dominated by eating rivals,
+which scale with PACE.
+
+**Decision: PACE = 1.5.** Round 1 runs ~20 % (≈5 s) longer than today —
+still a warm-up — and the added headroom is what covers the shield/ghost
+survival buffs the growth sim cannot see. Re-tune (one number) after the
 phone play-test if the late rounds feel like a grind.
 
 ## 5. Landscape & controls
