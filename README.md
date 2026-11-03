@@ -1,6 +1,6 @@
 # Noodle Pit
 
-A worm-arena game for phones. Steer with the joystick, eat pellets and smaller worms, avoid bigger ones, and work through five rounds to take down the Pit King. Unlock skins as you go.
+A worm-arena game for phones. Steer with the joystick, eat pellets, bite smaller worms head-on, and trick any worm, however big, into running into your side. Work through five rounds to take down the Pit King, then try the daily challenge and endless mode. Unlock skins, hats, trails and death pops as you go.
 
 Installable PWA — works offline once opened, no build step, no dependencies.
 
@@ -20,9 +20,10 @@ Once GitHub Pages is on, open the site in Safari on your iPhone, tap Share → *
 
 - `index.html` — page shell and markup
 - `style.css` — all styling
-- `game.js` — the game: loop, worms, AI, rounds, skins, input, screens
+- `game.js` — the game: loop, worms, AI, rounds, modes, hazards, skins, input, screens
+- `rules.js` — pure game rules (`Rules`): contacts, streaks, scoring and medals, rival personalities, hazards, daily seeds, cosmetics
 - `audio.js` — synthesized sound effects and music (`Sound`)
-- `fx.js` — particles, screen shake, flashes (`FX`)
+- `fx.js` — particles, floating text, banners, screen shake, flashes (`FX`)
 - `sw.js` — service worker that caches the game for offline play
 - `manifest.webmanifest` — makes it installable (fullscreen, portrait, icon)
 - `icon-*.png`, `apple-touch-icon.png` — home-screen icons
@@ -39,6 +40,57 @@ After changing any shipped file, bump `CACHE` in `sw.js` (e.g. `noodle-pit-v3`) 
 - Boost button (bottom-right) or spacebar: speed up, costs length
 - ⏸ / `P` / `Esc`: pause · 🔊 / `M`: mute (remembered between sessions)
 - Plays in portrait or landscape — many people find sideways easier
+
+## How bites work
+
+- **Head-on** (your head meets another worm's head): the bigger worm eats the smaller one.
+- **Side hit** (a head runs into any other part of a body): the worm whose head it was pops, whatever the sizes. A tiny worm can cut in front of a giant and take it down.
+- Every popped worm bursts into a trail of food.
+
+## Rivals
+
+Rivals have personalities, and each has a tell:
+
+- **Grazer** (plain): eats and snaps at much smaller heads.
+- **Hunter** (angry brows): stalks you and aims where you're going, to cut you off.
+- **Coward** (big eyes, sweats when scared): runs away from you.
+- **Coiler** (banded body): circles smaller worms so they run into its side.
+- **Thief** (bandit mask): goes after death drops and shadows big worms, waiting for them to pop.
+
+Later rounds bring in more hunters, coilers and thieves. The worm that eats you gets a 💢, taunts you, and comes back on your retry: eat it for **REVENGE**.
+
+## Score, streaks and medals
+
+- Eating scores 10 per point of length. Kills score more for bigger victims.
+- Kills within 4 s of each other stack a streak (**DOUBLE NOODLE**, **TRIPLE NOODLE**…) for bonus length and a score multiplier.
+- Skimming past a body that would have killed you is a **Close!**: +1 length and 50 points.
+- Clearing a round fast earns a time bonus and a 🥇/🥈/🥉 medal, shown on the round picker. Replay rounds to improve them.
+- Big kills get a beat of slow motion.
+
+## The arena
+
+- **Mud** (from round 2) slows you to about half speed.
+- **Spike logs** (Apex and the King) spin slowly and pop anything whose head touches them.
+- **The wall closes in** on Apex and the King round.
+- **Feeding frenzy**: every 30–45 s a golden zone rains rich food for 10 s. An arrow points to it, and rivals rush it too.
+
+## The Pit King
+
+He has three lives (the boss bar). He bites you head-on if you let him; dodge, and make him run into your side to **bonk** him. Each bonk costs him a life and some length, leaves him dizzy, and makes him angrier:
+
+1. Hunts you.
+2. Charges with boosts, drops a bait trail of berries, and calls minions he can eat to grow.
+3. Circles you tighter and tighter, then lunges.
+
+## Modes
+
+- **Rounds**: the five-round run.
+- **Daily** (📅): a 3-minute run on an arena laid out from the date, so it's the same for everyone that day, with a rotating modifier (Ghost Town, Orchard, Turbo Pit, Land of Giants, Tight Squeeze). Today's best is saved.
+- **Endless** (♾, unlocked by beating the King): no target. Rivals that spawn later in the run start bigger. Survive and score.
+
+## Style
+
+The menu's style picker has tabs for **Skins**, **Hats**, **Trails** and **Pops** (your death effect). Each locked item says how to unlock it: medals, streaks, close calls, playing a daily, beating the King, scoring in endless, and so on.
 
 ## Food and power-ups
 
@@ -57,4 +109,4 @@ Active buffs show as draining pills in the HUD.
 
 No build step. Serve the folder (`python -m http.server 8080`) and open `http://localhost:8080/`.
 Unit tests for the service worker, audio, FX and items modules, plus headless smoke runs of the game (portrait and landscape): `node --test`.
-Balance: `node tools/balance-sim.mjs 20` prints frames-to-target per round for a greedy autopilot; `PACE` in `game.js` scales round targets, rival sizes and the King (`node tools/balance-sim.mjs 20 20000 1.3` sweeps a value). Tuning notes live in `docs/superpowers/specs/2026-09-10-food-powerups-landscape-design.md`.
+Balance: `node tools/balance-sim.mjs 20` prints frames-to-target per round for a greedy autopilot whose god mode skips all player contacts, so it measures growth from food and rival-vs-rival deaths only (a real player also grows from kills). `node tools/balance-sim.mjs 20 20000 1.5 mortal` turns god mode off and reports how often and how fast the autopilot dies. The medal par times in `ROUNDS` come from this sim; `PACE` in `game.js` scales round targets, rival sizes and the King (`node tools/balance-sim.mjs 20 20000 1.3` sweeps a value). Tuning notes live in `docs/superpowers/specs/2026-09-10-food-powerups-landscape-design.md`.

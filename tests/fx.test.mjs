@@ -77,3 +77,33 @@ test('draw helpers run against a minimal ctx without throwing', () => {
   FX.drawWorld(ctx); FX.drawScreen(ctx, 100, 100);
   assert.ok(calls.includes('arc') && calls.includes('fillRect'));
 });
+
+test('floating text rises, fades out after its life, and is capped', () => {
+  FX.text(0, 0, 'Close!', '#fff', { life: 3 });
+  assert.equal(FX.texts.length, 1);
+  FX.update();
+  assert.ok(FX.texts[0].y < 0, 'text rises');
+  FX.update(); FX.update();
+  assert.equal(FX.texts.length, 0);
+  for (let i = 0; i < 100; i++) FX.text(0, 0, 'x');
+  assert.ok(FX.texts.length <= 24);
+});
+
+test('banner: one at a time, counts down, cleared by clear(); disabled FX adds nothing', () => {
+  FX.banner('DOUBLE NOODLE!', '#5cc8ff', 10, '+4 length');
+  FX.banner('REVENGE!', '#ff5d4a', 5);
+  assert.equal(FX._banner.text, 'REVENGE!');
+  assert.equal(FX._banner.t, 5);
+  FX.update(); assert.equal(FX._banner.t, 4);
+  FX.clear(); assert.equal(FX._banner.t, 0); assert.equal(FX.texts.length, 0);
+  FX.enabled = false; FX.text(0, 0, 'x'); FX.banner('y');
+  assert.equal(FX.texts.length, 0); assert.equal(FX._banner.t, 0);
+});
+
+test('drawWorld/drawScreen render texts and an active banner without throwing', () => {
+  const calls = [];
+  const ctx = new Proxy({}, { get: (t, k) => (k in t ? t[k] : (...a) => { calls.push(k); }), set: (t, k, v) => { t[k] = v; return true; } });
+  FX.text(1, 2, 'hi'); FX.banner('BIG', '#fff', 30, 'sub');
+  FX.drawWorld(ctx); FX.drawScreen(ctx, 390, 844);
+  assert.ok(calls.filter(c => c === 'fillText').length >= 5, 'text shadow + fill, banner shadow + fill + sub');
+});

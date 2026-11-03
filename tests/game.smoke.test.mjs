@@ -12,7 +12,15 @@ const dom = installDom({ html: body });
 loadScript('audio.js');
 loadScript('fx.js');
 loadScript('items.js');
+loadScript('rules.js');
 loadScript('game.js');
+
+// power-up tests aren't about collisions: move every rival far away so a wandering hunter can't spend the
+// shield (under the hybrid rule any body the player runs into is fatal)
+function parkRivals() {
+  const st = globalThis.NoodleDebug.state();
+  for (const w of st.worms) { if (!w.ai) continue; const dx = 1500 - w.x, dy = -w.y; w.x += dx; w.y += dy; for (const p of w.pts) { p.x += dx; p.y += dy; } w.persona = 'grazer'; }
+}
 
 test('boots to the title screen and renders idle frames without errors', () => {
   dom.frame(30);
@@ -107,7 +115,7 @@ test('pause freezes the run, resume continues it, tab-hide auto-pauses, quit ret
 
 test('power-ups: collect → effect + HUD pill; magnet pulls; speed suspends drain; shield survives the wall', () => {
   const D = globalThis.NoodleDebug;
-  dom.el('start').onclick(); dom.frame(2);
+  dom.el('start').onclick(); dom.frame(2); parkRivals();
   D.spawnPickup('magnet'); dom.frame(1);
   let st = D.state();
   assert.ok(st.effects.has('magnet'), 'pickup at the head is collected next frame');
@@ -132,17 +140,19 @@ test('power-ups: collect → effect + HUD pill; magnet pulls; speed suspends dra
 
 test('shield saves from a worm bite without feeding the attacker; buffs clear on game over', () => {
   const D = globalThis.NoodleDebug;
-  dom.el('start').onclick(); dom.frame(2);
+  dom.el('start').onclick(); dom.frame(2); parkRivals();
   D.spawnPickup('shield'); dom.frame(1);
   let st = D.state();
   // park a much bigger rival's head inside the player's body
   const rival = st.worms.find(w => w.ai && !w.dead), body = st.player.pts[3];
+  // no stray pellet there, so the rival's length only changes if it is (wrongly) credited with the bite
+  for (let i = st.food.length - 1; i >= 0; i--) if (Math.hypot(st.food[i].x - body.x, st.food[i].y - body.y) < 80) st.food.splice(i, 1);
   rival.len = 100; rival.x = body.x; rival.y = body.y; rival.pts[0] = { x: body.x, y: body.y };
   dom.frame(1);
   st = D.state();
   assert.equal(st.player.dead, false, 'shield absorbs the bite');
   assert.equal(st.effects.has('shield'), false, 'shield consumed');
-  assert.equal(rival.len, 100, 'the biter is not credited with a meal');
+  assert.ok(rival.len <= 100, 'the biter is not credited with a meal (a random boost may shed a point)');
   dom.frame(3);
   assert.equal(D.state().player.dead, false, 'ghost grace stops the re-bite on the following frames');
   // now die for real (wall) and confirm the HUD pills are gone
