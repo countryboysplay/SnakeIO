@@ -74,6 +74,13 @@
     roundWin() { const t = now(); [523, 659, 784, 1047].forEach((f, i) => osc('triangle', f, t + i * 0.11, 0.3, sfxBus, 0.3)); },
     unlock() { const t = now(); [1, 2, 3].forEach(h => osc('sine', 880 * h, t, 0.6 / h, sfxBus, 0.25 / h)); },
     tap() { noise(now(), 0.02, sfxBus, 0.3, 'highpass', 2000); },
+    // a rising arpeggio that climbs higher with every kill in the streak
+    streak(n = 2) { const t = now(), base = 440 * Math.pow(2, Math.min(n - 2, 4) / 6); [0, 4, 7, 12].forEach((s, i) => osc('square', base * Math.pow(2, s / 12), t + i * 0.05, 0.14, sfxBus, 0.16)); },
+    nearMiss() { const t = now(); noise(t, 0.12, sfxBus, 0.35, 'highpass', 3000); osc('sine', 1800, t, 0.1, sfxBus, 0.12, { to: 900 }); },
+    frenzy() { const t = now(); [784, 988, 1175, 1568, 1976].forEach((f, i) => osc('triangle', f, t + i * 0.07, 0.25, sfxBus, 0.2)); },
+    bonk() { const t = now(); osc('sine', 120, t, 0.35, sfxBus, 0.6, { to: 45 }); noise(t, 0.08, sfxBus, 0.4, 'bandpass', 900); osc('square', 660, t + 0.02, 0.3, sfxBus, 0.12, { to: 610 }); },
+    revenge() { const t = now(); [196, 247, 294, 392].forEach(f => osc('sawtooth', f, t, 0.5, sfxBus, 0.12)); osc('triangle', 784, t + 0.18, 0.4, sfxBus, 0.25); },
+    tick() { osc('square', 1200, now(), 0.04, sfxBus, 0.15); },
   };
 
   function boost(on) {
