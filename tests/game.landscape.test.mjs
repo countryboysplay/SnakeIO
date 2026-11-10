@@ -7,7 +7,7 @@ import { installDom } from './dom-stub.mjs';
 // Same boot as the smoke test, but with the phone held sideways.
 const html = fs.readFileSync(new URL('../index.html', import.meta.url), 'utf8');
 const dom = installDom({ html: html.slice(html.indexOf('<body>') + 6, html.indexOf('<script')), width: 844, height: 390 });
-for (const f of ['audio.js', 'fx.js', 'items.js', 'rules.js', 'sync.js', 'game.js']) loadScript(f);
+for (const f of ['songs.js', 'audio.js', 'fx.js', 'items.js', 'rules.js', 'sync.js', 'game.js']) loadScript(f);
 
 test('boots and plays in landscape (844×390) without errors; overlay uses column blocks', () => {
   dom.frame(10);

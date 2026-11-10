@@ -24,7 +24,8 @@ Once GitHub Pages is on, open the site in Safari on your iPhone, tap Share → *
 - `rules.js` — pure game rules (`Rules`): contacts, streaks, scoring and medals, rival personalities, hazards, daily seeds, cosmetics
 - `sync.js` — party snapshots (`Sync`): packing worms/food for guest phones and rebuilding smooth bodies from them
 - `net.js` — party networking (`Net`): a thin wrapper over PeerJS (WebRTC); `vendor/peerjs.min.js` is PeerJS 1.5.5 (MIT), loaded only when someone opens Party
-- `audio.js` — synthesized sound effects and music (`Sound`)
+- `audio.js` — synthesized sound effects and the music sequencer (`Sound`)
+- `songs.js` — the music as data (`Songs`): three tracks written on a 16th-note grid
 - `fx.js` — particles, floating text, banners, screen shake, flashes (`FX`)
 - `sw.js` — service worker that caches the game for offline play
 - `manifest.webmanifest` — makes it installable (fullscreen, portrait, icon)
@@ -40,7 +41,7 @@ After changing any shipped file, bump `CACHE` in `sw.js` (e.g. `noodle-pit-v3`) 
 
 - Joystick (bottom-left): steer — mouse works on desktop
 - Boost button (bottom-right) or spacebar: speed up, costs length
-- ⏸ / `P` / `Esc`: pause · 🔊 / `M`: mute (remembered between sessions)
+- ⏸ / `P` / `Esc`: pause · 🔊 / `M`: mute everything · 🎵 / `N`: music on/off (both remembered between sessions)
 - Plays in portrait or landscape — many people find sideways easier
 
 ## How bites work
