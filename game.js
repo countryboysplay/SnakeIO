@@ -15,13 +15,13 @@ const standalone = matchMedia('(display-mode: standalone)').matches || navigator
 const cv = document.getElementById('c'); let ctx = cv.getContext('2d');
 function ctxSwap(g){ ctx=g; }
 const lenEl = document.getElementById('len'), bestEl = document.getElementById('best'), scoreEl = document.getElementById('score'), timerEl = document.getElementById('timer');
-const bossEl = document.getElementById('boss'), bossHpEl = document.getElementById('bossHp');
+const bossEl = document.getElementById('boss'), bossHpEl = document.getElementById('bossHp'), boardEl = document.getElementById('board');
 let lastLen = 10, lastScore = -1;
 function lenPop(){ lenEl.classList.remove('pop'); void lenEl.offsetWidth; lenEl.classList.add('pop'); }
 // active power-up pills in the HUD; rebuilt only when the set changes, bars updated every 6 ticks
 const buffsEl = document.getElementById('buffs'); let buffKeys = '';
 function renderBuffs(force){
-  const act = effects.active(), keys = act.map(a=>a.kind).join(',');
+  const act = fxView().active(), keys = act.map(a=>a.kind).join(',');
   if (force || keys !== buffKeys){ buffKeys = keys; buffsEl.innerHTML = act.map(a=>`<span class="buff" style="--c:${Items.POWERUPS[a.kind].c}"><i>${Items.POWERUPS[a.kind].glyph}</i><b class="bar" style="width:${Math.round(a.frac*100)}%"></b></span>`).join(''); }
   if (force || tick%6===0){ const bars = buffsEl.querySelectorAll('.bar'); act.forEach((a,i)=>{ if (bars[i]) bars[i].style.width = Math.round(a.frac*100)+'%'; }); }
 }
@@ -64,6 +64,9 @@ const ROUNDS = [
 const KING_LEN = Math.round(320*PACE), KING_HP = 3;
 const L = n => Math.round(n*PACE);   // any other length-denominated tuning value (skin unlocks) scales the same way
 const ENDLESS = { target:0, rivals:12, rivalLen:[L(20),L(70)], name:'Endless', endless:true, hz:{mud:2, logs:1, shrink:1}, mix:4 };
+// party: phones on the same Wi-Fi share one pit for a 3-minute free-for-all; you respawn when eaten, top score wins
+const PARTY = { target:0, rivals:8, rivalLen:[L(15),L(55)], name:'Party', party:true, hz:{mud:2, logs:1, shrink:1}, mix:2 };
+const PARTY_FRAMES = 3*60*60;
 // modes: 'rounds' (the five-round run), 'daily' (seeded 3-minute challenge), 'endless' (unlocked by the King)
 let mode = 'rounds', daily = Rules.dailyFor(Rules.dateKey());
 function dailyCfg(){
@@ -73,12 +76,12 @@ function dailyCfg(){
 }
 // the current run's config, resolved once per reset() (dailyCfg builds fresh objects, and cfg() is read every tick)
 let runCfg = null;
-function cfg(){ return runCfg || (runCfg = mode==='daily' ? dailyCfg() : mode==='endless' ? ENDLESS : ROUNDS[round]); }
+function cfg(){ return runCfg || (runCfg = mode==='daily' ? dailyCfg() : mode==='endless' ? ENDLESS : mode==='party' ? PARTY : ROUNDS[round]); }
 const dmod = () => mode==='daily' ? daily.mod.id : null;
 const noBites = () => dmod()==='ghosts';
 function dailyBest(){ const d = json('noodleDaily', null); return d && d.key===daily.key ? d.best : 0; }
 let round = 0, maxRound = +store.get('noodleRound') || 0, king = null;
-const goalEl=document.getElementById('goal'), roundNumEl=document.getElementById('roundNum'), roundNameEl=document.getElementById('roundName');
+const goalEl=document.getElementById('goal'), roundNumEl=document.getElementById('roundNum'), roundNameEl=document.getElementById('roundName'), roundWordEl=document.getElementById('roundWord');
 function buildRoundPicker(){
   const box=document.getElementById('rounds'); if(!box) return; box.innerHTML='';
   ROUNDS.forEach((r,i)=>{ const b=document.createElement('button'); b.className='rd'+(i===round?' sel':'')+(i>maxRound?' lock':''); b.textContent=r.king?'👑':i+1;
@@ -192,7 +195,8 @@ function titleScreen(){
   <p class="sub">Joystick steers · hold BOOST to speed up (costs length) · grab ⚡🛡👻🧲 power-ups</p>
   <button id="start" data-mode="rounds">Play</button>
   <div class="modes"><button id="daily" class="alt" data-mode="daily">📅 Daily: ${daily.mod.name}<small>${daily.mod.desc}${db?' · today\'s best '+db:''}</small></button>
-  <button id="endless" class="alt${lockE?' lock':''}" data-mode="endless">♾ Endless<small>${lockE?'beat the Pit King to unlock':'best '+stats.endlessBest}</small></button></div>
+  <button id="endless" class="alt${lockE?' lock':''}" data-mode="endless">♾ Endless<small>${lockE?'beat the Pit King to unlock':'best '+stats.endlessBest}</small></button>
+  <button id="party" class="alt">👥 Party<small>play together on phones on the same Wi-Fi</small></button></div>
   ${standalone ? '' : '<p class="sub" style="margin-top:18px">To install: tap Share, then Add to Home Screen.</p>'}</div>
   <div class="col side"><div id="rounds"></div><div id="style"></div></div>`;
 }
@@ -239,6 +243,7 @@ function showOverlay(html){
   for (const id of ['start','daily','endless']){ const b = overlay.querySelector('#'+id); if (!b) continue;
     b.onclick = ()=>{ if (id==='endless' && !stats.kingBeaten) return; if (b.dataset.mode) mode = b.dataset.mode; start(); }; }
   const mb = overlay.querySelector('#menu'); if (mb) mb.onclick = ()=>{ Sound.play('tap'); toMenu(); };
+  const pb = overlay.querySelector('#party'); if (pb) pb.onclick = ()=>{ Sound.play('tap'); showParty(); };
   overlay.classList.add('show'); overlay.inert = false;
   boostBtn.style.display='none'; pauseBtn.hidden = true; stick.style.visibility='hidden';
   Sound.music('menu');
@@ -260,7 +265,7 @@ function pauseScreen(){
   <p><button id="quit" class="ghostBtn">Quit to menu</button></p></div>`;
 }
 function pause(){
-  if (!running || paused) return;
+  if (!running || paused || mode==='party') return;   // a party pit is shared: nobody can stop it
   paused = true; running = false; boosting = false; player.boost = 0; player.fast = false; Sound.boost(false);
   showOverlay(pauseScreen());
   overlay.querySelector('#resume').onclick = ()=>{ Sound.play('tap'); resume(); };
@@ -277,7 +282,7 @@ function quitToMenu(){
   saveBest(); saveStats();
   toMenu();
 }
-function toMenu(){ deathT = 0; mode = 'rounds'; reset(); showOverlay(titleScreen()); }
+function toMenu(){ leaveParty(); deathT = 0; mode = 'rounds'; running = false; reset(); showOverlay(titleScreen()); }
 pauseBtn.addEventListener('pointerdown', e=>{ e.preventDefault(); Sound.unlock(); Sound.play('tap'); pause(); });
 addEventListener('keydown', e=>{ if((e.code==='Escape' || e.code==='KeyP') && !e.repeat){ if (paused) resume(); else pause(); } });
 document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='hidden' && running) pause(); });
@@ -290,22 +295,44 @@ let nemesisSave = null, nearCool = 0, minionAt = 0, lastTimerS = -1;
 const streak = Rules.createStreak();
 let baseR = ARENA, arenaR = ARENA, mud = [], logs = [], frenzy = null, nextFrenzyAt = 0;
 
-// power-ups: one pickup on the arena at a time, player-only effects on a frame clock
+// power-ups: one pickup on the arena at a time; each human worm has its own effects on a frame clock
+// (effects is the local player's)
 let pickups = [], nextPickupAt = 0;
 const effects = Items.createEffects();
+let wormSeq = 0;   // worm ids, so party guests can tell worms apart between snapshots
+// humans: the local player and, when hosting a party, each guest's worm. Feedback (sounds, banners, shakes) for a
+// human goes through feel(): played here for the local player, queued for a guest's next snapshot otherwise.
+const ghosted = o => !!(o.human && o.fx && o.fx.has('ghost'));
+function feel(h, ev){ if (!h) return; if (h===player) applyFeel(ev); else if (h.out) h.out.push(ev); }
+function feelAll(ev){ for (const h of worms) if (h.human) feel(h, ev); }
+function applyFeel(e){
+  switch (e[0]){
+    case 's': Sound.play(e[1], e[2]); break;
+    case 'b': FX.banner(e[1], e[2], e[3], e[4]); break;
+    case 't': FX.text(e[1], e[2], e[3], e[4], { size: e[5] }); break;
+    case 'k': FX.shake(e[1], e[2]); break;
+    case 'f': FX.flash(e[1], e[2]); break;
+    case 'p': FX.burst(e[1], e[2], e[3], e[4], { speed: e[5], life: e[6], r: e[7] }); break;
+  }
+}
+// a world-space burst everyone near it should see
+function burstAll(x, y, n, c, o){
+  FX.burst(x, y, n, c, o);
+  for (const h of worms) if (h.human && h.out && Math.hypot(h.x-x, h.y-y) < 1200) h.out.push(['p', Math.round(x), Math.round(y), n, c, o.speed, o.life, o.r]);
+}
 function schedulePickup(){ nextPickupAt = tick + rnd(Items.PICKUP.interval[0], Items.PICKUP.interval[1]); }
 function spawnPickup(kind, x, y){
-  if (x==null){ for (let t=0;t<10;t++){ const a=rnd(0,Math.PI*2), r=rnd(200,arenaR-200); x=Math.cos(a)*r; y=Math.sin(a)*r; if (Math.hypot(x-player.x,y-player.y)>=Items.PICKUP.minDist) break; } }
+  if (x==null){ for (let t=0;t<10;t++){ const a=rnd(0,Math.PI*2), r=rnd(200,arenaR-200); x=Math.cos(a)*r; y=Math.sin(a)*r; if (worms.every(h=>!h.human||Math.hypot(x-h.x,y-h.y)>=Items.PICKUP.minDist)) break; } }
   pickups.push({ x, y, kind: kind || Items.pickPowerup(), born: tick });
 }
 // the shield absorbs one fatal hit: bounce, shed 10% length, pull back inside the arena, and phase out
 // for ~0.75 s so the worm you're overlapping can't bite again on the very next frame
-function shieldSave(){
-  effects.consume('shield'); playerHitWall = false;
-  if (!effects.has('ghost')) effects.add('ghost', 45);
-  player.ang += Math.PI; player.len = Math.max(6, Math.floor(player.len*0.9));
-  const d = Math.hypot(player.x,player.y); if (d > arenaR-20){ player.x *= (arenaR-20)/d; player.y *= (arenaR-20)/d; }
-  FX.shake(8,12); FX.burst(player.x,player.y,24,'#c9f24a',{speed:4,life:24,r:2.5}); Sound.play('shieldHit');
+function shieldSave(h = player){
+  h.fx.consume('shield'); if (h===player) playerHitWall = false;
+  if (!h.fx.has('ghost')) h.fx.add('ghost', 45);
+  h.ang += Math.PI; h.len = Math.max(6, Math.floor(h.len*0.9));
+  const d = Math.hypot(h.x,h.y); if (d > arenaR-20){ h.x *= (arenaR-20)/d; h.y *= (arenaR-20)/d; }
+  feel(h, ['k',8,12]); burstAll(h.x,h.y,24,'#c9f24a',{speed:4,life:24,r:2.5}); feel(h, ['s','shieldHit']);
 }
 
 function rnd(a,b){ return a + Math.random()*(b-a); }
@@ -328,17 +355,41 @@ function mkWorm(isPlayer, len, o={}){
   const R=cfg(); if(len==null) len = isPlayer ? 10 : Math.round(rnd(R.rivalLen[0],R.rivalLen[1])*endlessScale());
   const persona = isPlayer ? null : (o.persona || Rules.pickPersona(R.mix));
   const c = isPlayer ? skinOf(skinId).c : (o.c || PALETTE[Math.random()*PALETTE.length|0]);
-  const s = { x: Math.cos(a)*r, y: Math.sin(a)*r, ang: rnd(0,Math.PI*2), len, pts: [], c, skin: isPlayer ? skinOf(skinId) : (o.skin || null), ai: !isPlayer, persona, turnT: 0, dead:false, orbit: Math.random()<.5 ? 1 : -1 };
+  const s = { id: ++wormSeq, x: Math.cos(a)*r, y: Math.sin(a)*r, ang: rnd(0,Math.PI*2), len, pts: [], c, skin: isPlayer ? skinOf(skinId) : (o.skin || null), ai: !isPlayer, persona, turnT: 0, dead:false, orbit: Math.random()<.5 ? 1 : -1 };
   if (persona==='coiler' && !s.skin) s.skin = { c, c2:'#1b1330', type:'bands' };   // coilers read as banded constrictors
   for (let i=0;i<s.len;i++) s.pts.push({x:s.x - Math.cos(s.ang)*i*SEG, y:s.y - Math.sin(s.ang)*i*SEG});
   return s;
 }
-// a rival's body is laid out in a straight line from its head, so a long one can land across the player:
-// re-roll until no part of it is within 180 px of the player's head, and its head isn't on a spike log
+// a rival's body is laid out in a straight line from its head, so a long one can land across a human:
+// re-roll until no part of it is within 180 px of any human's head, and its head isn't on a spike log
 function mkRival(len, o){
-  let s;
-  for (let t=0;t<12;t++){ s = mkWorm(false, len, o); if ((!player || s.pts.every(p=>(p.x-player.x)**2+(p.y-player.y)**2 > 180*180)) && !logs.some(g=>Rules.segDist2(s.x,s.y,g.x,g.y,g.a,Rules.LOG.len/2) < 80*80)) break; }
+  let s; const hs = worms.filter(w=>w.human && !w.dead);
+  for (let t=0;t<12;t++){ s = mkWorm(false, len, o); if (s.pts.every(p=>hs.every(h=>(p.x-h.x)**2+(p.y-h.y)**2 > 180*180)) && !logs.some(g=>Rules.segDist2(s.x,s.y,g.x,g.y,g.a,Rules.LOG.len/2) < 80*80)) break; }
   return s;
+}
+// a human worm: the local player (fx/streak are the shared globals) or a party guest (its own, plus an input to steer
+// it and an outbox of feedback for its next snapshot)
+function mkHuman(name, skin, peer){
+  const s = mkWorm(true); s.skin = skinOf(skin); s.c = s.skin.c;
+  Object.assign(s, { human:true, name, peer, score:0, kills:0, deaths:0, best:s.len, nearCool:0,
+    fx: peer ? Items.createEffects() : effects, streak: peer ? Rules.createStreak() : streak, out: peer ? [] : null, input: { steer:null, boost:false } });
+  return s;
+}
+// put a (re)spawning human somewhere roomy, facing a random way, short again, with a moment of spawn protection
+function respawnHuman(h){
+  let best = null, bd = -1;
+  for (let t=0;t<16;t++){
+    const a=rnd(0,Math.PI*2), r=rnd(200, Math.max(300, arenaR-350)), x=Math.cos(a)*r, y=Math.sin(a)*r;
+    if (logs.some(g=>Rules.segDist2(x,y,g.x,g.y,g.a,Rules.LOG.len/2) < 120*120)) continue;
+    let md = 1e12; for (const o of worms){ if (o.dead||o===h) continue; for (let i=0;i<o.pts.length;i+=6){ const p=o.pts[i], d=(p.x-x)**2+(p.y-y)**2; if (d<md) md=d; } }
+    if (md > bd){ bd = md; best = { x, y }; }
+  }
+  if (!best) best = { x:0, y:0 };
+  const ang = rnd(0, Math.PI*2);
+  Object.assign(h, { x:best.x, y:best.y, ang, len:10, dead:false, respawnAt:null, focus:null, boost:0, fast:false });
+  h.pts = Array.from({length:10}, (_,i)=>({ x:best.x-Math.cos(ang)*i*SEG, y:best.y-Math.sin(ang)*i*SEG }));
+  h.fx.clear(); h.fx.add('ghost', 120);
+  feel(h, ['b','GO!','#c9f24a',50,'']);
 }
 // the daily challenge lays out the arena from a date seed, so everyone gets the same start. Math.random is
 // swapped for the duration of buildArena (synchronous, no FX/sound inside) so every spawn helper picks up the seed
@@ -350,8 +401,15 @@ function buildArena(){
   const inner = baseR*hz.shrink - 250;
   mud = []; for (let i=0;i<hz.mud;i++){ const a=rnd(0,Math.PI*2), r=rnd(350, inner); mud.push({ x:Math.cos(a)*r, y:Math.sin(a)*r, r: Rules.MUD.r*rnd(.8,1.2), ph: rnd(0,6) }); }
   logs = []; for (let i=0;i<hz.logs;i++){ const a=rnd(0,Math.PI*2), r=rnd(Rules.LOG.len*0.5+350, Math.max(Rules.LOG.len*0.5+400, inner-Rules.LOG.len*0.5)); logs.push({ x:Math.cos(a)*r, y:Math.sin(a)*r, a: rnd(0,Math.PI), spin: Rules.LOG.spin*(Math.random()<.5?1:-1) }); }
-  player = mkWorm(true); player.x = 0; player.y = 0; player.pts = player.pts.map((p,i)=>({x:-Math.cos(player.ang)*i*SEG, y:-Math.sin(player.ang)*i*SEG}));
+  player = mkHuman(myName(), skinId, null); player.x = 0; player.y = 0; player.pts = player.pts.map((p,i)=>({x:-Math.cos(player.ang)*i*SEG, y:-Math.sin(player.ang)*i*SEG}));
   worms.push(player);
+  // party guests start in a ring around the host
+  if (R.party && party) [...party.roster.values()].forEach((g, i, all) => {
+    const h = mkHuman(g.name, g.skin, g.id), a = (i+1) * Math.PI*2 / (all.length+1);
+    h.x = Math.cos(a)*320; h.y = Math.sin(a)*320; h.ang = a + Math.PI/2; h.hatGlyph = cosOf('hat', g.hat).glyph;
+    h.pts = h.pts.map((p,k)=>({ x:h.x-Math.cos(h.ang)*k*SEG, y:h.y-Math.sin(h.ang)*k*SEG }));
+    g.worm = h; worms.push(h);
+  });
   king=null;
   for (let i=0;i<R.rivals;i++) worms.push(mkRival());
   if (R.king){ king = mkRival(KING_LEN, { persona:'king', c:'#ffd23f', skin:{c:'#ffd23f',c2:'#7a3e00',type:'bands'} }); Object.assign(king, { isKing:true, hp:KING_HP, stun:0, boostCd:180, immuneUntil:0 }); worms.push(king); }
@@ -367,9 +425,11 @@ function reset(){
   if (nemesisSave && !R.king){ const n = mkRival(Math.max(nemesisSave.len, R.rivalLen[0]), nemesisSave); n.nemesis = true; worms.push(n); }
   score = 0; lastScore = -1; runKills = 0; streak.reset(); runStart = tick; winAt = 0; slowmo = 0; deathT = 0; deathFocus = null; deathInfo = null;
   frenzy = null; nextFrenzyAt = tick + Rules.FRENZY.first; minionAt = tick + 600; nearCool = 0; lastTimerS = -1;
-  goalEl.textContent = R.king ? ' — bonk the King' : R.target ? ' / '+R.target+' and biggest' : R.daily ? ' — '+daily.mod.name : ' — survive'; goalEl.classList.remove('met');
-  roundNumEl.textContent = mode==='rounds' ? round+1 : mode==='daily' ? '📅' : '♾'; roundNameEl.textContent = mode==='rounds' ? R.name : R.name.replace('Daily · ','');
-  timerEl.hidden = mode!=='daily'; timerEl.textContent = fmtTime(Rules.DAILY_FRAMES);
+  goalEl.textContent = R.king ? ' — bonk the King' : R.target ? ' / '+R.target+' and biggest' : R.daily ? ' — '+daily.mod.name : R.party ? ' — top score wins' : ' — survive'; goalEl.classList.remove('met');
+  roundWordEl.hidden = mode!=='rounds';   // "Round 3", but just "📅 Daily" / "♾ Endless" / "👥 Party"
+  roundNumEl.textContent = mode==='rounds' ? round+1 : mode==='daily' ? '📅' : mode==='party' ? '👥' : '♾'; roundNameEl.textContent = mode==='rounds' ? R.name : R.name.replace('Daily · ','');
+  timerEl.hidden = !(R.daily || R.party); timerEl.textContent = fmtTime(R.party ? PARTY_FRAMES : Rules.DAILY_FRAMES);
+  boardEl.hidden = !R.party; boardEl.innerHTML = '';
   bossEl.hidden = !king; renderBoss(); layoutTop();
   lastLen = player.len; lenEl.textContent = player.len; scoreEl.textContent = 0;
 }
@@ -379,10 +439,11 @@ function renderBoss(){
 }
 function kill(s, by, cause){
   if (s===player && (godMode || winAt)){ playerHitWall = false; const d=Math.hypot(s.x,s.y); if (d>arenaR-20){ s.x*=(arenaR-20)/d; s.y*=(arenaR-20)/d; } return; }
-  if (s===player && effects.has('shield')){ shieldSave(); return; }
+  if (s.human && s.fx.has('shield')){ shieldSave(s); return; }
   s.dead = true;
   for (let i=0;i<s.pts.length;i+=2){ const p=s.pts[i]; mkFood(p.x+rnd(-4,4), p.y+rnd(-4,4), 'chunk', s.c); }
-  FX.burst(s.x, s.y, Math.min(24, 12 + (s.len/12|0)), s.c, { speed: 3.5, life: 36, r: 3 });
+  burstAll(s.x, s.y, Math.min(24, 12 + (s.len/12|0)), s.c, { speed: 3.5, life: 36, r: 3 });
+  if (s.human && mode==='party'){ killerFeel(s, by); humanDown(s, by, cause); return; }   // in a party you respawn instead
   if (s === player){
     FX.shake(14, 27); FX.flash('rgba(255,93,74,.35)', 3);
     deathPop();
@@ -395,14 +456,26 @@ function kill(s, by, cause){
     deathFocus = by && !by.dead ? by : null;
     gameOver();
   } else {
-    if (by === player){
-      FX.burst(player.x, player.y, 8, '#c9f24a', { speed: 5, life: 20, r: 2 });
-      FX.shake(Math.min(10, 3 + s.len/20), 15); FX.flash('rgba(255,255,255,.18)', 2);
-      if (s.isKing) FX.shake(18, 36);
-    }
+    killerFeel(s, by);
     if (s.isKing && !winAt) winAt = tick + 50;   // the win is locked in now; the overlay waits out the slow-mo beat
     if (!s.isKing && !s.minion) s.respawnAt = tick + 90;   // on the tick clock so a pause can't swallow the respawn
   }
+}
+function killerFeel(s, by){
+  if (!by || !by.human) return;
+  feel(by, ['p', by.x, by.y, 8, '#c9f24a', 5, 20, 2]);
+  feel(by, ['k', Math.min(10, 3 + s.len/20), 15]); feel(by, ['f', 'rgba(255,255,255,.18)', 2]);
+  if (s.isKing) feel(by, ['k', 18, 36]);
+}
+// a human eaten in a party: taunt, the camera follows whoever did it, back in 3 s
+function humanDown(h, by, cause){
+  h.deaths++; h.respawnAt = tick + 180; h.deadAt = { x:h.x, y:h.y }; h.focus = by && !by.dead ? by : null;
+  h.fx.clear(); h.boost = 0; h.fast = false; if (h===player) Sound.boost(false);
+  feel(h, ['k',14,27]); feel(h, ['f','rgba(255,93,74,.35)',3]); feel(h, ['s', cause==='wall'||cause==='log' ? 'wall' : 'death']);
+  if (h===player) deathPop();
+  if (by && !by.dead) by.taunt = { text: Rules.TAUNTS[Math.random()*Rules.TAUNTS.length|0], until: tick + 240 };
+  const who = by ? (by.human ? by.name : 'a '+((Rules.PERSONAS[by.persona]||{name:'worm'}).name.toLowerCase())) : cause==='log' ? 'a spike log' : cause==='wall' ? 'the wall' : '';
+  feel(h, ['b', 'EATEN', '#ff5d4a', 150, (who ? 'by '+who+' · ' : '')+'back in 3 s']);
 }
 // the player's death effect, picked in the style menu
 function deathPop(){
@@ -416,24 +489,30 @@ function deathPop(){
 function radius(s){ return 5 + Math.min(10, s.len/25); }
 
 // ---- scoring moments ----
-function addScore(n){ score += n; }
-function playerKill(v){
-  eaten++; store.set('noodleEaten',eaten); runKills++;
-  const n = streak.hit(tick); if (n > stats.bestStreak) stats.bestStreak = n;   // saved at run end (endRun/roundWin)
+// score is the local player's; party guests keep theirs on their worm
+function addScore(n, h = player){ if (h===player) score += n; else h.score += n; }
+const scoreOf = h => h===player ? score : h.score;
+function playerKill(v){ humanKill(player, v); }
+function humanKill(h, v){
+  if (h===player){ eaten++; store.set('noodleEaten',eaten); runKills++; }
+  h.kills = (h.kills||0) + 1;
+  const n = h.streak.hit(tick); if (h===player && n > stats.bestStreak) stats.bestStreak = n;   // saved at run end (endRun/roundWin)
   const bonus = L(Rules.streakBonus(n)), pts = Rules.killPoints(v.len, n);
-  player.len += bonus; addScore(pts);
-  Sound.play('eatWorm', v.len);
-  FX.text(v.x, v.y-18, '+'+pts, '#c9f24a', { size: 15 });
-  if (v.nemesis){ addScore(Rules.POINTS.revenge); nemesisSave = null; FX.banner('REVENGE!', '#ff5d4a', 110, '+'+Rules.POINTS.revenge); Sound.play('revenge'); }
-  else if (n >= 2){ FX.banner(Rules.streakName(n), n>=4 ? '#ff7ad9' : n===3 ? '#ffb347' : '#5cc8ff', 90, '+'+bonus+' length'); Sound.play('streak', n); }
-  if (v.len >= L(40) || v.isKing) slowmo = v.isKing ? 50 : 24;   // a big kill gets a beat of slow motion
+  h.len += bonus; addScore(pts, h);
+  feel(h, ['s','eatWorm', v.len]);
+  feel(h, ['t', v.x, v.y-18, '+'+pts, '#c9f24a', 15]);
+  if (v.nemesis && h===player){ addScore(Rules.POINTS.revenge); nemesisSave = null; FX.banner('REVENGE!', '#ff5d4a', 110, '+'+Rules.POINTS.revenge); Sound.play('revenge'); }
+  else if (v.human){ addScore(Rules.POINTS.revenge, h); feel(h, ['b', 'ATE '+v.name.toUpperCase()+'!', '#ff7ad9', 100, '+'+Rules.POINTS.revenge]); feel(h, ['s','revenge']); }
+  else if (n >= 2){ feel(h, ['b', Rules.streakName(n), n>=4 ? '#ff7ad9' : n===3 ? '#ffb347' : '#5cc8ff', 90, '+'+bonus+' length']); feel(h, ['s','streak', n]); }
+  // a big kill gets a beat of slow motion (not in a party: it would slow everyone's game)
+  if ((v.len >= L(40) || v.isKing) && mode!=='party') slowmo = v.isKing ? 50 : 24;
 }
-function nearMiss(o){
-  if (tick < nearCool || tick < (o.nearAt||0)) return;
-  nearCool = tick + 45; o.nearAt = tick + 180;
-  stats.nearMisses++;
-  player.len += 1; addScore(Rules.POINTS.nearMiss);
-  FX.text(player.x, player.y-22, 'Close!', '#5cc8ff', { size: 16 }); Sound.play('nearMiss');
+function nearMiss(h, o){
+  if (tick < h.nearCool || tick < (o.nearAt||0)) return;
+  h.nearCool = tick + 45; o.nearAt = tick + 180;
+  if (h===player) stats.nearMisses++;
+  h.len += 1; addScore(Rules.POINTS.nearMiss, h);
+  feel(h, ['t', h.x, h.y-22, 'Close!', '#5cc8ff', 16]); feel(h, ['s','nearMiss']);
 }
 // the King bounced off your side (or a hazard): he loses a life, sheds length as grubs, gets dizzy and turns away
 // byPlayer is false when a hazard (wall, spike log) did it
@@ -455,9 +534,10 @@ function contact(s, o, headOn){
   const out = Rules.resolveContact(s.len, o.len, headOn, { biterKing: !!s.isKing, bodyPlayer: o===player });
   if (out==='bonk'){ kingBonk(s); return; }
   const victim = out==='biter' ? s : o, killer = victim===s ? o : s;
-  if (victim===player){ if (winAt) return; if (effects.has('shield')){ shieldSave(); return; } }   // no bite in either direction; nothing can undo a King kill
+  if (victim===player && winAt) return;   // nothing can undo a King kill
+  if (victim.human && victim.fx.has('shield')){ shieldSave(victim); return; }   // no bite in either direction
   if (killer===s && (headOn || s.isKing)) s.len += Math.ceil(victim.len/2);   // a head-on bite swallows half the loser
-  if (killer===player) playerKill(victim);
+  if (killer.human) humanKill(killer, victim);
   kill(victim, killer);
 }
 
@@ -473,24 +553,24 @@ function aiSteer(s){
   if (s.isKing) return kingSteer(s);
   s.turnT--;
   s.boost = Math.max(0,(s.boost||0)-1); if (!s.boost && Math.random()<.006) s.boost = 30;
-  const P = s.persona, pAlive = !player.dead, ghostP = effects.has('ghost');
+  const P = s.persona, tgt = nearestHuman(s) || player, pAlive = !tgt.dead, ghostP = ghosted(tgt);
   const { f, d: fd } = bestFood(s, P==='thief');
   let target = f ? Math.atan2(f.y-s.y, f.x-s.x) : s.ang;
   if (frenzy && frenzy.live && P!=='coward'){ const d=Math.hypot(frenzy.x-s.x, frenzy.y-s.y); if (d<1400 && d>Rules.FRENZY.r*0.5) target = Math.atan2(frenzy.y-s.y, frenzy.x-s.x); }
-  const pdx = player.x-s.x, pdy = player.y-s.y, pd = Math.hypot(pdx,pdy);
+  const pdx = tgt.x-s.x, pdy = tgt.y-s.y, pd = Math.hypot(pdx,pdy);
   s.fleeing = false;
   if (P==='hunter' && pAlive && !ghostP && pd < Rules.PERSONAS.hunter.range){
     // aim where the player is going, to cut across their path
     const lead = Math.min(140, pd*0.5);
-    target = Math.atan2(player.y+Math.sin(player.ang)*lead - s.y, player.x+Math.cos(player.ang)*lead - s.x);
+    target = Math.atan2(tgt.y+Math.sin(tgt.ang)*lead - s.y, tgt.x+Math.cos(tgt.ang)*lead - s.x);
     if (pd < 320 && !s.boost && Math.random()<.03) s.boost = 25;
-  } else if (P==='coward' && pAlive && pd < Rules.PERSONAS.coward.range && player.len > s.len*0.5){
+  } else if (P==='coward' && pAlive && pd < Rules.PERSONAS.coward.range && tgt.len > s.len*0.5){
     target = Math.atan2(-pdy,-pdx); s.fleeing = true;
     if (pd < 180 && !s.boost && Math.random()<.05) s.boost = 20;
   } else if (P==='coiler'){
     // circle the nearest smaller worm so it runs into our side
     let prey=null, pdist=Rules.PERSONAS.coiler.range;
-    for (const o of worms){ if (o===s||o.dead||o.len>=s.len*0.9||(o===player&&ghostP)) continue; const d=Math.hypot(o.x-s.x,o.y-s.y); if (d<pdist){ pdist=d; prey=o; } }
+    for (const o of worms){ if (o===s||o.dead||o.len>=s.len*0.9||ghosted(o)) continue; const d=Math.hypot(o.x-s.x,o.y-s.y); if (d<pdist){ pdist=d; prey=o; } }
     if (prey){ const a = Math.atan2(s.y-prey.y, s.x-prey.x) + 0.6*s.orbit, R = Math.max(50, Math.min(160, s.len*0.5));
       target = Math.atan2(prey.y+Math.sin(a)*R - s.y, prey.x+Math.cos(a)*R - s.x); }
   } else if (P==='thief' && fd > 300*300){
@@ -500,17 +580,18 @@ function aiSteer(s){
   }
   if (P!=='coiler' && !s.fleeing){
     // everyone takes a bite at a much smaller head that wanders close
-    for (const o of worms){ if (o===s||o.dead||(o===player&&ghostP)||noBites()) continue; if (o.len < s.len*0.8 && (o.x-s.x)**2+(o.y-s.y)**2 < 250*250){ target = Math.atan2(o.y-s.y, o.x-s.x); break; } }
+    for (const o of worms){ if (o===s||o.dead||ghosted(o)||noBites()) continue; if (o.len < s.len*0.8 && (o.x-s.x)**2+(o.y-s.y)**2 < 250*250){ target = Math.atan2(o.y-s.y, o.x-s.x); break; } }
   }
   if (s.turnT<=0){ s.turnT = 40+Math.random()*60; if(Math.random()<.2) target += rnd(-1,1); }
   return avoid(s, target);
 }
+function nearestHuman(s){ let b=null, bd=Infinity; for (const o of worms){ if (!o.human||o.dead) continue; const d=(o.x-s.x)**2+(o.y-s.y)**2; if (d<bd){ bd=d; b=o; } } return b; }
 // the overrides every brain shares: keep off the wall, out of every body (smaller heads excepted) and away from spike logs
 function avoid(s, target){
   if (Math.hypot(s.x,s.y) > arenaR-150) target = Math.atan2(-s.y,-s.x);
   const look = s.boost ? 95 : 60, lx = s.x+Math.cos(s.ang)*look, ly = s.y+Math.sin(s.ang)*look, sr = radius(s);
   if (!noBites()) outer: for (const o of worms){
-    if (o===s||o.dead||(o===player&&effects.has('ghost'))) continue;
+    if (o===s||o.dead||ghosted(o)) continue;
     const orr = radius(o), hz = (orr*Rules.HEAD_ZONE)**2, small = o.len < s.len, lim = (orr+sr+10)**2;
     for (let i=0;i<o.pts.length;i+=3){ const p=o.pts[i];
       if (small && (p.x-o.x)**2+(p.y-o.y)**2 < hz) continue;
@@ -562,7 +643,7 @@ function updateArena(){
   if (!frenzy && tick >= nextFrenzyAt){
     const a=rnd(0,Math.PI*2), r=rnd(300, arenaR*0.6);
     frenzy = { x:Math.cos(a)*r, y:Math.sin(a)*r, at: tick+F.warn, end: tick+F.warn+F.dur, live:false, count:0 };
-    if (!player.dead){ FX.banner('FEEDING FRENZY', '#ffd23f', 120, 'follow the arrow'); Sound.play('frenzy'); }
+    for (const h of worms) if (h.human && !h.dead){ feel(h, ['b','FEEDING FRENZY','#ffd23f',120,'follow the arrow']); feel(h, ['s','frenzy']); }
   }
   if (frenzy){
     if (tick >= frenzy.at) frenzy.live = true;
@@ -598,20 +679,23 @@ function trail(){
 function update(){
   tick++;
   if (worms.some(w=>w.dead && w.minion)) worms = worms.filter(w=>!(w.dead && w.minion));
-  for (let i=0;i<worms.length;i++){ const s=worms[i]; if (s.dead && s.respawnAt!=null && tick>=s.respawnAt) worms[i]=mkRival(); }
+  for (let i=0;i<worms.length;i++){ const s=worms[i]; if (s.dead && s.respawnAt!=null && tick>=s.respawnAt){ if (s.human) respawnHuman(s); else worms[i]=mkRival(); } }
   updateArena();
-  // power-up pickups: spawn, expire, collect (player only)
+  // power-up pickups: spawn, expire, collect (humans only)
   if (!pickups.length && tick >= nextPickupAt) spawnPickup();
   for (let i=pickups.length-1;i>=0;i--){ const p=pickups[i];
     if (tick - p.born >= Items.PICKUP.ttl){ pickups.splice(i,1); schedulePickup(); continue; }
-    const rr = radius(player)+14;
-    if (!player.dead && (p.x-player.x)**2+(p.y-player.y)**2 < rr*rr){
-      const P = Items.POWERUPS[p.kind]; effects.add(p.kind, P.dur);
-      FX.burst(p.x,p.y,14,P.c,{speed:4,life:30,r:2.5}); Sound.play('pickup'); pickups.splice(i,1); schedulePickup();
-    }
+    for (const h of worms){ if (!h.human || h.dead) continue;
+      const rr = radius(h)+14;
+      if ((p.x-h.x)**2+(p.y-h.y)**2 < rr*rr){
+        const P = Items.POWERUPS[p.kind]; h.fx.add(p.kind, P.dur);
+        burstAll(p.x,p.y,14,P.c,{speed:4,life:30,r:2.5}); feel(h, ['s','pickup']); pickups.splice(i,1); schedulePickup(); break;
+      } }
   }
-  for (const k of effects.tick()) Sound.play('buffEnd');
-  if (effects.has('magnet')){ for (const f of food){ const dx=player.x-f.x, dy=player.y-f.y, d=Math.hypot(dx,dy); if (d<140 && d>1){ f.x += dx/d*4; f.y += dy/d*4; } } }
+  for (const h of worms){ if (!h.human) continue;
+    for (const k of h.fx.tick()) feel(h, ['s','buffEnd']);
+    if (h.fx.has('magnet') && !h.dead){ for (const f of food){ const dx=h.x-f.x, dy=h.y-f.y, d=Math.hypot(dx,dy); if (d<140 && d>1){ f.x += dx/d*4; f.y += dy/d*4; } } }
+  }
   // spawn food to keep arena stocked
   if (food.length < foodTarget() && tick%4===0) spawnFood();
   const speedMul = dmod()==='turbo' ? 1.5 : 1;
@@ -620,16 +704,20 @@ function update(){
     let target;
     if (s.ai){
       target = aiSteer(s);
-    } else {
+    } else if (s===player){
       target = steer==null ? s.ang : steer;
       // "fast" = boosting or the speed buff; camera, hum, banner and speed lines all key off it
       const wasFast = !!s.fast; s.boost = boosting && s.len>6 ? 1 : 0; s.fast = !!(s.boost || effects.has('speed'));
       if (s.fast !== wasFast) Sound.boost(s.fast);
+    } else {
+      // a party guest, steered by the input their phone last sent
+      target = s.input.steer==null ? s.ang : s.input.steer;
+      s.boost = s.input.boost && s.len>6 ? 1 : 0; s.fast = !!(s.boost || s.fx.has('speed'));
     }
     let d = target - s.ang; d = Math.atan2(Math.sin(d), Math.cos(d));
     s.ang += Math.max(-0.11, Math.min(0.11, d));
     s.turn = Math.abs(Math.max(-0.11, Math.min(0.11, d)))/0.11;
-    const speedBuff = s===player && effects.has('speed'), fast = s.ai ? !!s.boost : !!s.fast;
+    const speedBuff = s.human && s.fx.has('speed'), fast = s.ai ? !!s.boost : !!s.fast;
     let sp = BASE_SPEED * speedMul * (fast ? 2.2 : 1);
     if (inMud(s)) sp *= Rules.MUD.slow;
     if (s.isKing && s.stun>0) sp *= 0.4;
@@ -639,30 +727,33 @@ function update(){
     s.x += Math.cos(s.ang)*sp; s.y += Math.sin(s.ang)*sp;
     // the wall and spike logs pop whatever runs into them (a ghosted player phases through logs);
     // the King only gets bonked by them, so luring him into a hazard costs him a life instead of ending the fight
-    const dWall = Math.hypot(s.x,s.y), onLog = !(s===player && effects.has('ghost')) && hitsLog(s);
+    const dWall = Math.hypot(s.x,s.y), onLog = !ghosted(s) && hitsLog(s);
     if (s.isKing && (dWall > arenaR || onLog)){
       if (dWall > arenaR-20){ s.x *= (arenaR-30)/dWall; s.y *= (arenaR-30)/dWall; }
       if (tick >= s.immuneUntil){ kingBonk(s, false); if (s.dead) continue; } else if (onLog) s.ang += 0.2;
     }
-    else if (dWall > arenaR){ if (s===player) playerHitWall = true; kill(s, null); continue; }
+    else if (dWall > arenaR){ if (s===player) playerHitWall = true; kill(s, null, 'wall'); continue; }
     else if (onLog){ kill(s, null, 'log'); if (s.dead) continue; }
     s.pts.unshift({x:s.x,y:s.y});
     const maxPts = Math.min(Math.round(600*PACE), Math.floor(s.len * 1.6));
     while (s.pts.length > maxPts) s.pts.pop();
     // eat
     const r = radius(s)+6;
-    for (let i=food.length-1;i>=0;i--){ const f=food[i]; if((f.x-s.x)**2+(f.y-s.y)**2 < r*r){ s.len += f.v; if (s===player){ addScore(f.v*Rules.POINTS.food); FX.burst(f.x, f.y, 3 + (f.v/2|0), f.c, { speed: 1.8 + f.v*0.15, life: 15, r: 1.8 }); Sound.play('eat', f.v); if (f.kind==='apple') Sound.play('apple'); } eatFood(i); } }
+    for (let i=food.length-1;i>=0;i--){ const f=food[i]; if((f.x-s.x)**2+(f.y-s.y)**2 < r*r){ s.len += f.v;
+      if (s.human){ addScore(f.v*Rules.POINTS.food, s); feel(s, ['p', Math.round(f.x), Math.round(f.y), 3 + (f.v/2|0), f.c, 1.8 + f.v*0.15, 15, 1.8]); feel(s, ['s','eat',f.v]); if (f.kind==='apple') feel(s, ['s','apple']); }
+      eatFood(i); } }
+    if (s.human && s.len > s.best) s.best = s.len;
   }
   trail();
   // collisions (head into other body); a ghosted player is skipped both ways — checked per pair, not cached,
   // because a shield save mid-loop grants ghost and the reverse pair (rival head → player body) must see it
   if (!noBites()) for (const s of worms){
     if (s.dead) continue;
-    const r = radius(s), isP = s===player;
+    const r = radius(s), isP = !!s.human;
     for (const o of worms){
       // the balance sim's god mode skips player contacts both ways, so it measures growth from food and
       // rival-vs-rival deaths only (an invincible player would otherwise farm every rival that rams it)
-      if (o===s||o.dead||((isP||o===player)&&(effects.has('ghost')||godMode))) continue;
+      if (o===s||o.dead||ghosted(s)||ghosted(o)||(godMode&&(s===player||o===player))) continue;
       if (s.isKing && o===player && tick < s.immuneUntil) continue;
       const orr = radius(o), rr=(r+orr)*(r+orr), near = isP ? (r+orr+12)**2 : 0, hz=(orr*Rules.HEAD_ZONE)**2;
       let hit=null, close=false;
@@ -670,7 +761,7 @@ function update(){
         if (d2<rr){ hit=p; break; }
         // a close call: skimming past a body that would have killed you
         if (d2<near && (o.len>s.len || (p.x-o.x)**2+(p.y-o.y)**2 >= hz)) close=true; }
-      if (!hit){ if (close) nearMiss(o); continue; }
+      if (!hit){ if (close) nearMiss(s, o); continue; }
       contact(s, o, Rules.isHeadOn(hit.x-o.x, hit.y-o.y, orr));
       if (s.dead) break;
     }
@@ -682,15 +773,25 @@ function update(){
     if (R.king){ if (king && king.dead && !winAt) winAt = tick + 50; if (winAt && tick>=winAt) roundWin(); }
     else if (R.target && player.len>=R.target && worms.every(o=>o.dead||o===player||o.len<player.len)) roundWin();
     if (R.daily){
-      const left = Rules.DAILY_FRAMES - (tick-runStart), s = Math.ceil(left/60);
-      if (s !== lastTimerS){ lastTimerS = s; timerEl.textContent = fmtTime(left); timerEl.classList.toggle('low', s<=10); if (s<=10 && s>0) Sound.play('tick'); }
+      const left = Rules.DAILY_FRAMES - (tick-runStart);
+      showTimer(left);
       if (left <= 0) timeUp();
     }
+  }
+  if (R.party && running){   // the host's own death doesn't stop a party clock
+    const left = PARTY_FRAMES - (tick-runStart);
+    showTimer(left);
+    if (tick%30===0) renderBoard(boardData(), player.id);
+    if (left <= 0) partyEnd();
   }
   if (!player.dead){   // after a death the loop drives the camera (death cam)
     const camK = player.fast ? 0.18 : 0.12;
     cam.x += (player.x-cam.x)*camK; cam.y += (player.y-cam.y)*camK;
+  } else if (mode==='party'){   // eaten in a party: watch whoever did it until you respawn
+    const f = player.focus && !player.focus.dead ? player.focus : player.deadAt || player;
+    cam.x += (f.x-cam.x)*0.08; cam.y += (f.y-cam.y)*0.08;
   }
+  if (party && party.started && running && tick%Sync.STEP===0) sendSnapshots();
   FX.update();
   if (player.len !== lastLen){ if (player.len > lastLen) lenPop(); lastLen = player.len; lenEl.textContent = player.len; }
   if (score !== lastScore){ lastScore = score; scoreEl.textContent = score; }
@@ -769,11 +870,11 @@ function drawFace(s, r){
   }
   if (P==='coward' && s.fleeing){ ctx.fillStyle='#8fd8ff'; ctx.beginPath(); ctx.arc(s.x+sx*r*1.05-fx*r*.2, s.y+sy*r*1.05-fy*r*.2, r*.22, 0, Math.PI*2); ctx.fill(); }
   if (s.isKing && s.stun>0){ ctx.font=`${Math.round(r*.9)}px sans-serif`; ctx.textAlign='center'; for (let k=0;k<3;k++){ const a=tick/8+k*2.1; ctx.fillText('⭐', s.x+Math.cos(a)*r*1.4, s.y-r*1.2+Math.sin(a)*r*.5); } }
-  const hat = s===player ? cosOf('hat', style.hat).glyph : '';
+  const hat = s===player ? cosOf('hat', style.hat).glyph : s.hatGlyph || '';
   if (hat){ ctx.font=`${Math.round(r*1.7)}px sans-serif`; ctx.textAlign='center'; ctx.fillText(hat, s.x, s.y-r*.55); }
   ctx.font='bold 12px sans-serif'; ctx.textAlign='center';
   ctx.fillStyle = s.nemesis ? '#ff5d4a' : 'rgba(255,255,255,.85)';
-  ctx.fillText((s.isKing?'👑 ':s.nemesis?'💢 ':'')+s.len, s.x, s.y-r-6-(hat ? r*1.2 : 0));
+  ctx.fillText((s.isKing?'👑 ':s.nemesis?'💢 ':'')+(s.human && s.name && mode==='party' ? s.name+' · ' : '')+s.len, s.x, s.y-r-6-(hat ? r*1.2 : 0));
   if (s.taunt && tick < s.taunt.until){
     const t=s.taunt.text; ctx.font='bold 13px sans-serif'; const w=(ctx.measureText(t).width||t.length*7)+14, bx=s.x+r+6, by=s.y-r-34;
     ctx.fillStyle='#fbf3e4'; ctx.beginPath(); ctx.roundRect ? ctx.roundRect(bx,by,w,22,8) : ctx.rect(bx,by,w,22); ctx.fill();
@@ -818,11 +919,12 @@ function draw(){
     if (s.dead) continue;
     const r = radius(s);
     if (s!==player && s.pts.every(p=>Math.abs(p.x-cam.x)>W/2+40||Math.abs(p.y-cam.y)>H/2+40)) continue;
-    const alpha = (s===player && effects.has('ghost')) || noBites() ? .5 : 1; ctx.globalAlpha = alpha;
+    const alpha = isGhost(s) || noBites() ? .5 : 1; ctx.globalAlpha = alpha;
     paintBody(s.pts, r, s.skin || {c:s.c,type:'solid'}, s.ai ? s.boost : s.fast, s.ang, s.x, s.y, s.turn, alpha);
     drawFace(s, r);
     if (s===player){
       ctx.globalAlpha=1;
+      const effects = fxView();
       if (effects.has('shield')){ ctx.strokeStyle='rgba(201,242,74,.6)'; ctx.lineWidth=3; ctx.beginPath(); ctx.arc(s.x,s.y,r*1.9,0,Math.PI*2); ctx.stroke(); }
       if (effects.has('magnet')){ ctx.strokeStyle='rgba(255,93,74,.12)'; ctx.lineWidth=2; ctx.beginPath(); ctx.arc(s.x,s.y,140,0,Math.PI*2); ctx.stroke(); }
     }
@@ -833,9 +935,14 @@ function draw(){
   if (frenzy && !player.dead) edgeArrow(frenzy.x, frenzy.y, '#ffd23f', 'FRENZY');
   if (king && !king.dead && !player.dead) edgeArrow(king.x, king.y, '#ff5d4a', 'KING');
   FX.drawScreen(ctx, W, H);
-  if (running && player.fast){ ctx.fillStyle='rgba(255,93,74,.9)'; ctx.font='bold 16px sans-serif'; ctx.textAlign='center'; ctx.fillText('BOOSTING', W/2, H-40); }
-  const n = streak.count(tick);
-  if (running && n >= 2){ ctx.fillStyle='#ffb347'; ctx.font='800 15px sans-serif'; ctx.textAlign='center'; ctx.fillText('STREAK ×'+n, W/2, H-62); }
+  const live = running || !!(guest && guest.on);
+  if (live && player.fast){ ctx.fillStyle='rgba(255,93,74,.9)'; ctx.font='bold 16px sans-serif'; ctx.textAlign='center'; ctx.fillText('BOOSTING', W/2, H-40); }
+  if (live && player.dead && mode==='party'){
+    const secs = guest ? (guest.me ? guest.me.r : 0) : Math.max(0, Math.ceil(((player.respawnAt||tick)-tick)/60));
+    ctx.fillStyle='#fbf3e4'; ctx.font='800 22px sans-serif'; ctx.textAlign='center'; ctx.fillText(secs > 0 ? 'Back in '+secs+'…' : 'Get ready…', W/2, H*0.62);
+  }
+  const n = guest ? (guest.me ? guest.me.st : 0) : streak.count(tick);
+  if (live && n >= 2){ ctx.fillStyle='#ffb347'; ctx.font='800 15px sans-serif'; ctx.textAlign='center'; ctx.fillText('STREAK ×'+n, W/2, H-62); }
 }
 
 // slow-mo runs the sim every other frame; after a death the world plays on at third speed while the
@@ -843,7 +950,8 @@ function draw(){
 let frameN = 0;
 function loop(){
   frameN++;
-  if (running){ if (slowmo>0){ slowmo--; if (frameN%2===0) update(); } else update(); }
+  if (guest && guest.on) guestFrame();
+  else if (running){ if (slowmo>0){ slowmo--; if (frameN%2===0) update(); } else update(); }
   else if (deathT>0){
     deathT--; if (frameN%3===0) update();
     if (deathFocus){ cam.x += (deathFocus.x-cam.x)*0.08; cam.y += (deathFocus.y-cam.y)*0.08; }   // glide to the killer at full frame rate
@@ -900,6 +1008,243 @@ function start(){
   else if (cfg().king) FX.banner('THE PIT KING', '#ffd23f', 120, 'make him run into your side');
 }
 
+
+// ================= party: phones on the same Wi-Fi =================
+// The host's phone runs the one real game (update() with a human worm per guest) and sends each guest a snapshot of
+// what's around them every Sync.STEP ticks. Guests don't simulate: guestFrame() loads the latest snapshot into the
+// same variables draw() reads (worms, food, pickups, …) and sends back only the joystick and boost.
+let party = null;   // host: { code, roster: Map(peerId → { id, name, skin, hat, view, worm }), started }
+let guest = null;   // guest: { code, on, myId, cur, prev, recvAt, me, names, hats, lastIn }
+const MEDALS = ['🥇','🥈','🥉'];
+const num = v => Number.isFinite(+v) ? Math.round(+v) : 0;   // numbers from another phone, safe to put in HTML
+const lobbyNames = () => [myName(), ...[...party.roster.values()].map(g=>g.name)];
+const esc = t => String(t).replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' })[c]);
+const cleanName = n => String(n || '').replace(/[^\p{L}\p{N} _.'-]/gu, '').trim().slice(0, 12);
+function myName(){ return cleanName(store.get('noodleName')) || 'Noodle'; }
+const fxView = () => guest && guest.on ? guestFx : effects;
+const isGhost = s => guest && guest.on ? !!(s.flags & Sync.F.ghost) : ghosted(s);
+let guestFx = { has: () => false, active: () => [] };
+function showTimer(left){
+  const sec = Math.ceil(left/60);
+  if (sec !== lastTimerS){ lastTimerS = sec; timerEl.textContent = fmtTime(left); timerEl.classList.toggle('low', sec<=10); if (sec<=10 && sec>0) Sound.play('tick'); }
+}
+// the scoreboard under the HUD: [id, name, score] sorted best first
+function boardData(){ return worms.filter(w=>w.human).map(h=>[h.id, h.name, scoreOf(h)]).sort((a,b)=>b[2]-a[2]); }
+function renderBoard(b, myId){
+  if (!b) return;
+  boardEl.innerHTML = b.slice(0, 4).map((r,i)=>`<span class="${r[0]===myId?'me':''}">${MEDALS[i]||(i+1)+'.'} ${esc(r[1])} ${num(r[2])}</span>`).join('');
+}
+function standings(){ return worms.filter(w=>w.human).map(h=>({ id:h.id, name:h.name, score:scoreOf(h), kills:h.kills||0, best:h.best||h.len, deaths:h.deaths||0 })).sort((a,b)=>b.score-a.score); }
+function partyEndScreen(st, myId, isHost){
+  const mine = st.findIndex(r=>r.id===myId), won = mine===0;
+  return `<div class="col main"><h1>${won ? 'You win!' : 'Time!'}<span>${won ? 'top noodle of the pit' : esc(st[0] ? st[0].name : '')+' wins'}</span></h1>
+  <ol class="standings">${st.map((r,i)=>`<li class="${r.id===myId?'me':''}"><b>${MEDALS[i]||(i+1)+'.'}</b> <span>${esc(r.name)}</span> <em>${num(r.score)}</em><small>${num(r.kills)} kills · longest ${num(r.best)} · eaten ${num(r.deaths)}×</small></li>`).join('')}</ol>
+  ${isHost ? '<button id="go">Play again</button><p><button id="menu" class="ghostBtn">Close the room</button></p>' : '<p class="sub">Waiting for the host to start another…</p><p><button id="menu" class="ghostBtn">Leave</button></p>'}</div>`;
+}
+function partyMenuScreen(err){
+  return `<div class="col main"><h1>Party<span>phones on the same Wi-Fi</span></h1>
+  <p>One phone hosts and gets a code. Everyone else taps Join and types it in. Then it's a 3-minute free-for-all: top score wins.</p>
+  <label class="field">Your name<input id="pname" maxlength="12" value="${esc(store.get('noodleName')||'')}" placeholder="Noodle" autocomplete="off" spellcheck="false"></label>
+  <button id="host">Host a game</button>
+  <div class="joinRow"><input id="pcode" maxlength="4" placeholder="CODE" autocapitalize="characters" autocomplete="off" spellcheck="false" inputmode="text"><button id="join" class="alt">Join</button></div>
+  ${err ? `<p class="err">${esc(err)}</p>` : ''}
+  <p><button id="menu" class="ghostBtn">Back</button></p></div>`;
+}
+const busyScreen = msg => `<div class="col main"><h1>${esc(msg)}</h1><p class="sub">This takes a few seconds.</p><p><button id="menu" class="ghostBtn">Cancel</button></p></div>`;
+function lobbyList(names){ return `<ul class="lobby">${names.map((n,i)=>`<li>${i===0?'👑 ':''}${esc(n)}</li>`).join('')}</ul>`; }
+function hostLobbyScreen(){
+  const names = lobbyNames();
+  return `<div class="col main"><h1>Room <span class="code">${party.code}</span><span>tell everyone this code</span></h1>
+  <p>On each phone: open Noodle Pit → 👥 Party → type <b>${party.code}</b> → Join. Same Wi-Fi as you.</p>
+  ${lobbyList(names)}
+  <button id="go">${names.length>1 ? 'Start · '+names.length+' players' : 'Start (just you so far)'}</button>
+  <p><button id="menu" class="ghostBtn">Close the room</button></p></div>`;
+}
+function guestLobbyScreen(){
+  return `<div class="col main"><h1>Joined <span class="code">${guest.code}</span><span>waiting for the host to start</span></h1>
+  ${lobbyList(guest.names || [])}
+  <p><button id="menu" class="ghostBtn">Leave</button></p></div>`;
+}
+function wire(id, fn){ const b = overlay.querySelector('#'+id); if (b) b.onclick = ()=>{ Sound.play('tap'); fn(); }; }
+function showParty(err){
+  showOverlay(partyMenuScreen(err));
+  wire('host', ()=>{ saveName(); doHost(); });
+  wire('join', ()=>{ saveName(); doJoin(); });
+}
+function saveName(){ const i = overlay.querySelector('#pname'); if (i) store.set('noodleName', cleanName(i.value)); }
+function showHostLobby(){ showOverlay(hostLobbyScreen()); wire('go', partyStart); }
+function showGuestLobby(){ showOverlay(guestLobbyScreen()); }
+
+// ---- host ----
+async function doHost(){
+  showOverlay(busyScreen('Opening a room…'));
+  party = { code:null, roster:new Map(), started:false };
+  const mine = party;
+  try { const code = await Net.host(onHostNet, Sync.makeCode); if (party !== mine) return; party.code = code; showHostLobby(); }
+  catch (e) { if (party !== mine) return; party = null; showParty(e.message); }
+}
+function lobbyChanged(){
+  Net.broadcast({ k:'lobby', names: lobbyNames() });
+  if (!party.started && overlay.classList.contains('show') && overlay.querySelector('.code')) showHostLobby();
+}
+const clampN = (v, lo, hi, d) => Number.isFinite(+v) ? Math.max(lo, Math.min(hi, +v)) : d;
+function onHostNet(ev){
+  if (!party) return;
+  if (ev.type==='join'){
+    if (party.roster.size >= 7){ Net.kick(ev.id); return; }   // 8 worms of people is plenty for one pit
+    const m = ev.meta || {}, taken = new Set(lobbyNames()), base = cleanName(m.name) || 'Player';
+    let name = base; for (let n = 2; taken.has(name); n++) name = base.slice(0, 9)+' '+n;   // "Noodle", "Noodle 2", …
+    const g = { id:ev.id, name, skin: SKINS.some(k=>k.id===m.skin) ? m.skin : 'lime', hat: m.hat, view:{ w:clampN(m.w,200,1500,400), h:clampN(m.h,200,1500,800) }, worm:null };
+    party.roster.set(ev.id, g); Sound.play('pickup'); lobbyChanged();
+    if (party.started && running) addGuestToMatch(g);
+  } else if (ev.type==='data'){
+    const g = party.roster.get(ev.id), d = ev.data; if (!g || !d) return;
+    if (d.k==='in' && g.worm){ g.worm.input.steer = typeof d.a==='number' && Number.isFinite(d.a) ? d.a : null; g.worm.input.boost = !!d.b; }
+    else if (d.k==='view') g.view = { w:clampN(d.w,200,1500,g.view.w), h:clampN(d.h,200,1500,g.view.h) };
+  } else if (ev.type==='leave'){
+    const g = party.roster.get(ev.id); if (!g) return;
+    party.roster.delete(ev.id);
+    if (g.worm){ worms = worms.filter(w=>w!==g.worm); feelAll(['b', g.name+' left', '#fbf3e4', 90, '']); }
+    lobbyChanged();
+  }
+}
+function startMsg(h){
+  return { k:'start', id:h.id, baseR, mud: mud.map(m=>[Math.round(m.x), Math.round(m.y), Math.round(m.r), m.ph]), logs: logs.map(g=>[Math.round(g.x), Math.round(g.y), g.a, g.spin]),
+    hats: Object.fromEntries(worms.filter(w=>w.human).map(w=>[w.id, w===player ? cosOf('hat', style.hat).glyph : w.hatGlyph||''])) };
+}
+function addGuestToMatch(g){
+  const h = mkHuman(g.name, g.skin, g.id); h.hatGlyph = cosOf('hat', g.hat).glyph;
+  respawnHuman(h); g.worm = h; worms.push(h);
+  Net.send(g.id, startMsg(h), true);
+  Net.broadcast({ k:'hat', id:h.id, g:h.hatGlyph });   // the others started before this worm existed
+}
+function partyStart(){
+  if (!party) return;
+  Sound.unlock(); unlockedBefore = new Set(unlockedKeys().map(k=>k.key));
+  mode = 'party'; party.started = true; nemesisSave = null;
+  reset(); paused = false; running = true; steer = null; boosting = false;
+  for (const g of party.roster.values()) if (g.worm) Net.send(g.id, startMsg(g.worm), true);
+  hideOverlay(); pauseBtn.hidden = true;
+  Sound.music('play'); FX.banner('3 MINUTES', '#5cc8ff', 110, 'top score wins · you respawn when eaten');
+}
+function flagsOf(s){
+  const F = Sync.F;
+  s.tauntText = s.taunt && tick < s.taunt.until ? s.taunt.text : 0;
+  return ((s.ai ? s.boost : s.fast) ? F.boost : 0) | (ghosted(s) ? F.ghost : 0) | (s.isKing ? F.king : 0) | (s.nemesis ? F.nemesis : 0)
+    | (s.fleeing ? F.fleeing : 0) | (s.human ? F.human : 0) | (s.stun > 0 ? F.stun : 0);
+}
+function sendSnapshots(){
+  const board = tick%32===0 ? boardData() : null, la = logs.map(g=>Math.round(g.a*1000)/1000), fz = frenzy ? [Math.round(frenzy.x), Math.round(frenzy.y), frenzy.live?1:0] : 0;
+  const packed = new Map();   // pack each worm at most once per snapshot round
+  for (const g of party.roster.values()){
+    const h = g.worm; if (!h) continue;
+    const f = h.dead ? (h.focus && !h.focus.dead ? h.focus : h.deadAt || h) : h;
+    const iv = Sync.viewTest(f.x, f.y, g.view.w/2, g.view.h/2, 160);
+    const msg = { k:'s', f: Sync.packFood(food, PALETTE, iv), p: Sync.packPickups(pickups.filter(p=>iv(p.x,p.y)), tick), la, fz, ar: Math.round(arenaR),
+      L: PARTY_FRAMES - (tick-runStart), w: [],
+      me: { i:h.id, d:h.dead?1:0, r: h.dead ? Math.max(0, Math.ceil((h.respawnAt-tick)/60)) : 0, fx: h.fx.active().map(a=>[a.kind, Math.round(a.frac*100)/100]),
+        s:h.score, st:h.streak.count(tick), len:h.len, cx:Math.round(f.x), cy:Math.round(f.y) },
+      e: h.out.splice(0) };
+    for (const s of worms){ if (s.dead || !Sync.wormInView(s, iv)) continue; if (!packed.has(s)) packed.set(s, Sync.packWorm(s, flagsOf(s))); msg.w.push(packed.get(s)); }
+    if (board) msg.b = board;
+    if (!Net.send(g.id, msg)) h.out.unshift(...msg.e);   // link backed up: keep its feedback for the next one
+  }
+}
+function partyEnd(){
+  running = false; Sound.boost(false); Sound.play('roundWin'); effects.clear(); renderBuffs(true);
+  saveBest(); saveStats();
+  const st = standings();
+  Net.broadcast({ k:'end', st });
+  FX.confetti(W/2, H*0.45, 60, PALETTE);
+  showOverlay(partyEndScreen(st, player.id, true)); wire('go', partyStart);
+}
+function leaveParty(){
+  if (party || guest) Net.close();
+  party = null; guest = null; guestFx = { has: () => false, active: () => [] };
+  boardEl.hidden = true;
+}
+
+// ---- guest ----
+async function doJoin(){
+  const i = overlay.querySelector('#pcode'), code = Sync.cleanCode(i && i.value);
+  if (code.length !== 4){ showParty('Room codes are 4 letters.'); return; }
+  showOverlay(busyScreen('Joining '+code+'…'));
+  guest = { code, on:false, names:[], hats:{} };
+  const mine = guest;
+  try {
+    await Net.join(code, { name: myName(), skin: skinId, hat: style.hat, w: innerWidth, h: innerHeight }, onGuestNet);
+    if (guest !== mine) return;
+    showGuestLobby();
+  } catch (e) { if (guest !== mine) return; guest = null; showParty(e.message); }
+}
+function onGuestNet(ev){
+  if (!guest) return;
+  if (ev.type==='leave'){ const was = guest; leaveParty(); running = false; if (was.on) { mode = 'rounds'; } showParty('The host closed the game.'); return; }
+  const d = ev.data; if (!d) return;
+  if (d.k==='lobby'){ guest.names = d.names; if (!guest.on && overlay.querySelector('.code')) showGuestLobby(); }
+  else if (d.k==='start') guestStart(d);
+  else if (d.k==='hat'){ if (Number.isFinite(d.id)) guest.hats[d.id] = String(d.g || '').slice(0, 4); }
+  else if (d.k==='s') guestSnap(d);
+  else if (d.k==='end'){ guest.on = false; Sound.boost(false); Sound.play('roundWin'); FX.confetti(W/2, H*0.45, 60, PALETTE); showOverlay(partyEndScreen(d.st || [], guest.myId, false)); }
+}
+function guestStart(d){
+  mode = 'party'; runCfg = null; running = false; FX.clear();
+  guest.myId = d.id; guest.hats = d.hats || {}; guest.cur = null; guest.prev = null; guest.me = null; guest.on = true; guest.lastIn = '';
+  baseR = d.baseR; arenaR = baseR;
+  mud = (d.mud||[]).map(m=>({ x:m[0], y:m[1], r:m[2], ph:m[3] }));
+  logs = (d.logs||[]).map(g=>({ x:g[0], y:g[1], a:g[2], spin:g[3] }));
+  worms = []; food = []; pickups = []; frenzy = null; king = null;
+  player = { dead:true, x:0, y:0, pts:[], len:10, ang:0 };
+  lastLen = -1; lastScore = -1; lastTimerS = -1; steer = null; boosting = false;
+  goalEl.textContent = ' — top score wins'; roundWordEl.hidden = true; roundNumEl.textContent = '👥'; roundNameEl.textContent = 'Party';
+  timerEl.hidden = false; boardEl.hidden = false; bossEl.hidden = true;
+  hideOverlay(); pauseBtn.hidden = true; layoutTop();
+  Sound.unlock(); Sound.music('play'); FX.banner('3 MINUTES', '#5cc8ff', 110, 'top score wins · you respawn when eaten');
+}
+function guestSnap(d){
+  const g = guest; if (!g.on) return;
+  g.prev = g.cur;
+  g.cur = { w: (d.w||[]).map(Sync.unpackWorm), f: Sync.unpackFood(d.f||[], PALETTE, FOOD_COLORS, Items.FOOD), p: Sync.unpackPickups(d.p||[], tick),
+    la: d.la || [], fz: d.fz, ar: d.ar, L: d.L };
+  g.prevById = new Map(g.prev ? g.prev.w.map(u=>[u.id, u]) : []);
+  g.recvAt = performance.now(); g.me = d.me;
+  for (const e of d.e || []) applyFeel(e);
+  if (d.b) renderBoard(d.b, g.myId);
+}
+function guestWorm(u, prev, a){
+  const F = Sync.F, f = u.flags, pts = Sync.renderPts(u.body, prev ? a : 1);
+  return { id:u.id, x: pts[0] ? pts[0].x : u.x, y: pts[0] ? pts[0].y : u.y, ang: prev ? Sync.lerpAngle(prev.ang, u.ang, a) : u.ang, len:u.len, c:u.c, skin:u.skin,
+    persona:u.persona, flags:f, pts, turn:0, boost: !!(f & F.boost), fast: !!(f & F.boost), isKing: !!(f & F.king), nemesis: !!(f & F.nemesis),
+    fleeing: !!(f & F.fleeing), human: !!(f & F.human), stun: f & F.stun ? 1 : 0, name:u.name, hatGlyph: guest.hats[u.id] || '',
+    taunt: u.taunt ? { text:u.taunt, until: tick + 2 } : null };
+}
+function guestFrame(){
+  const g = guest; tick++;
+  // input: steer (to ~1°) + boost; on change at most 20×/s, and a keep-alive every 6 frames
+  const a = steer==null ? null : Math.round(steer*50)/50, inp = a + (boosting ? 'b' : '');
+  if ((inp !== g.lastIn && tick - (g.inAt||0) >= 3) || tick - (g.inAt||0) >= 6){ g.lastIn = inp; g.inAt = tick; Net.toHost({ k:'in', a, b: boosting ? 1 : 0 }); }
+  if (g.cur){
+    const cur = g.cur, a = Math.min(1, (performance.now() - g.recvAt) / (Sync.STEP*1000/60));
+    worms = cur.w.map(u => guestWorm(u, g.prevById.get(u.id), a));
+    food = cur.f; pickups = cur.p; arenaR = cur.ar;
+    const pla = g.prev ? g.prev.la : cur.la;
+    logs.forEach((l,i)=>{ if (cur.la[i] != null) l.a = pla[i] != null ? Sync.lerpAngle(pla[i], cur.la[i], a) : cur.la[i]; });
+    frenzy = cur.fz ? { x:cur.fz[0], y:cur.fz[1], live: !!cur.fz[2] } : null;
+    const me = g.me || {}, mine = worms.find(w=>w.id===me.i);
+    const fxl = me.fx || [];
+    guestFx = { has: k => fxl.some(e=>e[0]===k), active: () => fxl.map(e=>({ kind:e[0], frac:e[1] })) };
+    player = mine && !me.d ? mine : { dead:true, x: me.cx||0, y: me.cy||0, pts:[], len: me.len||0, ang:0, fast:false };
+    const fx = player.dead ? me.cx||0 : player.x, fy = player.dead ? me.cy||0 : player.y, k = player.fast ? 0.18 : 0.12;
+    cam.x += (fx-cam.x)*k; cam.y += (fy-cam.y)*k;
+    if (me.len !== lastLen){ if (me.len > lastLen && lastLen >= 0) lenPop(); lastLen = me.len; lenEl.textContent = me.len; }
+    if (me.s !== lastScore){ lastScore = me.s; scoreEl.textContent = me.s; }
+    showTimer(cur.L);
+  }
+  trail(); renderBuffs(); FX.update();
+  if (tick%30===0) layoutTop();
+}
+addEventListener('resize', ()=>{ if (guest && guest.on) Net.toHost({ k:'view', w: innerWidth, h: innerHeight }); });
+
 // joystick in bottom-left: direction from stick center to finger
 const stick=document.getElementById('stick'), knob=document.getElementById('knob');
 let steerId=null;
@@ -930,6 +1275,7 @@ window.NoodleDebug = {
   setDaily: (key, modId) => { daily = { ...Rules.dailyFor(key), pinned: true }; if (modId) daily.mod = Rules.DAILY_MODS.find(m=>m.id===modId); },
   startFrenzy: () => { nextFrenzyAt = tick; },
   skipTime: f => { runStart -= f; },   // fast-forward the run clock (daily timer, arena shrink)
+  party: () => party, guest: () => guest,
 };
 
 reset(); showOverlay(titleScreen()); loop();
