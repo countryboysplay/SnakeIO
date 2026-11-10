@@ -35,7 +35,8 @@ let hudBottom = -1;
 function layoutTop(){
   const hud = document.getElementById('hud'), boss = document.getElementById('boss'); if (!hud || !boss) return;
   const hb = Math.round(hud.getBoundingClientRect().bottom);
-  if (hb !== hudBottom){ hudBottom = hb; boss.style.top = (hb + 6) + 'px'; }
+  // the menus start under the HUD too (a fixed offset wasn't enough once real iOS fonts made the HUD taller)
+  if (hb !== hudBottom){ hudBottom = hb; boss.style.top = (hb + 6) + 'px'; document.documentElement.style.setProperty('--hud-bottom', hb + 'px'); }
   FX.bannerTop = boss.hidden ? hb + 8 : Math.round(boss.getBoundingClientRect().bottom) + 10;
 }
 
@@ -244,13 +245,13 @@ function showOverlay(html){
     b.onclick = ()=>{ if (id==='endless' && !stats.kingBeaten) return; if (b.dataset.mode) mode = b.dataset.mode; start(); }; }
   const mb = overlay.querySelector('#menu'); if (mb) mb.onclick = ()=>{ Sound.play('tap'); toMenu(); };
   const pb = overlay.querySelector('#party'); if (pb) pb.onclick = ()=>{ Sound.play('tap'); showParty(); };
-  overlay.classList.add('show'); overlay.inert = false;
+  overlay.classList.add('show'); overlay.inert = false; document.body.classList.add('menu'); layoutTop();
   boostBtn.style.display='none'; pauseBtn.hidden = true; stick.style.visibility='hidden';
   Sound.music('menu');
 }
 function hideOverlay(){
   // inert + blur so the just-clicked Play button can't be re-triggered by Space/Enter during play
-  overlay.classList.remove('show'); overlay.inert = true;
+  overlay.classList.remove('show'); overlay.inert = true; document.body.classList.remove('menu'); layoutTop();
   const a = document.activeElement; if (a && a.blur) a.blur();
   boostBtn.style.display='flex'; pauseBtn.hidden = false; stick.style.visibility='';
 }
