@@ -6,7 +6,7 @@ import { loadScript } from './load.mjs';
 const made = { ctx: 0, osc: 0, gain: 0, src: 0 };
 function param(v = 0) {
   const p = { value: v, last: v };
-  for (const m of ['setValueAtTime', 'linearRampToValueAtTime', 'exponentialRampToValueAtTime']) p[m] = (x) => { p.last = x; return p; };
+  for (const m of ['setValueAtTime', 'linearRampToValueAtTime', 'exponentialRampToValueAtTime', 'setTargetAtTime']) p[m] = (x) => { p.last = x; return p; };
   p.cancelScheduledValues = () => p;
   return p;
 }
@@ -24,6 +24,7 @@ class FakeAudioContext {
   createBufferSource() { made.src++; return node({ buffer: null, loop: false }); }
 }
 globalThis.AudioContext = FakeAudioContext;
+loadScript('songs.js');
 loadScript('audio.js');
 const Sound = globalThis.Sound;
 const snap = () => ({ ...made });
@@ -42,7 +43,8 @@ test('a music mode requested before unlock starts when unlocked', () => {
   assert.equal(Sound._state().mode, 'menu');
   assert.equal(made.osc, 0, 'nothing should be created without a context');
   assert.equal(Sound.unlock(), true);
-  assert.ok(made.osc > 0, 'drone oscillators should now exist');
+  assert.ok(made.osc > 0, 'the first notes of the song are scheduled');
+  assert.equal(Sound._state().music.song, 'Noodle Lounge');
   Sound.music('off');
 });
 
@@ -87,7 +89,8 @@ test('music(): same mode is a no-op, switching modes crossfades, off stops', () 
   Sound.music('play');
   assert.deepEqual(snap(), afterStart, 'repeat mode must not rebuild the graph');
   Sound.music('king');
-  assert.ok(made.osc > afterStart.osc, 'new mode builds its own drone');
+  assert.ok(made.osc > afterStart.osc, 'the new song schedules its first notes');
+  assert.equal(Sound._state().music.song, 'Pit King');
   assert.equal(Sound._state().mode, 'king');
   Sound.music('off');
   assert.equal(Sound._state().mode, 'off');
@@ -98,4 +101,38 @@ test('eat SFX is throttled to 8 within 100 ms', () => {
   const before = snap();
   for (let i = 0; i < 20; i++) Sound.play('eat');
   assert.equal(made.osc - before.osc, 8);
+});
+
+test('the sequencer schedules steps ahead on the audio clock; a stall skips ahead instead of bursting', async () => {
+  const ctx = Sound._state().ctx, wait = ms => new Promise(r => setTimeout(r, ms));
+  Sound.music('play');
+  assert.equal(Sound._state().music.song, 'Wiggle Run');
+  const s0 = Sound._state().music.step;
+  // play a second of audio in small slices, as a real clock would: ~8 sixteenths at 124 bpm
+  for (let i = 0; i < 20; i++) { ctx.currentTime += 0.05; await wait(30); }
+  const s1 = Sound._state().music.step;
+  assert.ok(s1 - s0 >= 7 && s1 - s0 <= 11, `advanced ${s1 - s0} steps in 1 s`);
+  // a 5 s stall (throttled timer): the next pump schedules only what's due now, not 40 missed steps at once
+  const before = made.osc + made.src;
+  ctx.currentTime += 5; await wait(40);
+  assert.ok(made.osc + made.src - before < 40, 'no burst of missed notes');
+  Sound.music('off');
+});
+
+test('the music switch stops and restarts the song without touching the mode', () => {
+  Sound.music('menu');
+  assert.ok(Sound._state().music);
+  Sound.setMusicOn(false);
+  assert.equal(Sound.musicOn, false); assert.equal(Sound._state().music, null);
+  assert.equal(Sound._state().mode, 'menu', 'the game still knows which song belongs here');
+  Sound.music('play');
+  assert.equal(Sound._state().music, null, 'switching screens with music off stays silent');
+  Sound.setMusicOn(true);
+  assert.equal(Sound._state().music.song, 'Wiggle Run', 'turning it back on plays the current screen\'s song');
+  Sound.music('off');
+});
+
+test('intensity marks the frenzy groove on and off', () => {
+  Sound.intensity(1); assert.equal(Sound._state().hot, true);
+  Sound.intensity(0); assert.equal(Sound._state().hot, false);
 });

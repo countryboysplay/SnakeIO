@@ -17,7 +17,7 @@ const html = fs.readFileSync(new URL('../index.html', import.meta.url), 'utf8');
 const body = html.slice(html.indexOf('<body>') + 6, html.indexOf('<script'));
 const dom = installDom({ html: body });
 const legacy = process.argv[5] === 'legacy', mortal = process.argv[5] === 'mortal';
-for (const f of ['audio.js', 'fx.js', 'items.js', 'rules.js', 'sync.js']) if (fs.existsSync(new URL('../' + f, import.meta.url))) loadScript(f);
+for (const f of ['songs.js', 'audio.js', 'fx.js', 'items.js', 'rules.js', 'sync.js']) if (fs.existsSync(new URL('../' + f, import.meta.url))) loadScript(f);
 if (legacy && globalThis.Items) { globalThis.Items.pickFood = () => 'crumb'; globalThis.Items.PICKUP.first = 1e9; }
 loadScript('game.js');
 const D = globalThis.NoodleDebug, R = globalThis.Rules;

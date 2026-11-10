@@ -8,6 +8,7 @@
   #hud .btns { display:flex; gap:8px; margin-left:auto; }
   /* 44×44: Apple's minimum comfortable tap target */
   .hudBtn { pointer-events:auto; width:44px; height:44px; border-radius:22px; border:0; background:rgba(255,255,255,.14); color:var(--paper); font-size:19px; line-height:44px; text-align:center; text-shadow:none; }
+  .hudBtn.off { opacity:.45; text-decoration:line-through; }
   .hudBtn:active { transform:translateY(1px); background:rgba(255,255,255,.22); }
   #buffs { display:flex; gap:6px; }
   .buff { position:relative; width:30px; height:30px; border-radius:10px; background:rgba(255,255,255,.14); display:flex; align-items:center; justify-content:center; font-size:16px; overflow:hidden; }

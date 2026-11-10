@@ -9,6 +9,12 @@ muteBtn.addEventListener('pointerdown', e=>{ e.preventDefault(); Sound.unlock();
 // every gesture (re)unlocks: iOS suspends/interrupts the context whenever the app is backgrounded
 addEventListener('pointerdown', ()=>Sound.unlock()); addEventListener('touchstart', ()=>Sound.unlock(), {passive:true}); addEventListener('keydown', ()=>Sound.unlock());
 addEventListener('keydown', e=>{ if(e.code==='KeyM' && !e.repeat) setMuted(!Sound.muted); });
+// music has its own switch (🎵 / N), separate from the master mute
+const musicBtn = document.getElementById('music');
+function setMusicOn(b){ Sound.setMusicOn(b); store.set('noodleMusic', b?'1':'0'); musicBtn.classList.toggle('off', !b); musicBtn.setAttribute('aria-pressed', b?'true':'false'); }
+setMusicOn(store.get('noodleMusic')!=='0');
+musicBtn.addEventListener('pointerdown', e=>{ e.preventDefault(); Sound.unlock(); setMusicOn(!Sound.musicOn); Sound.play('tap'); });
+addEventListener('keydown', e=>{ if(e.code==='KeyN' && !e.repeat) setMusicOn(!Sound.musicOn); });
 document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='visible') Sound.wake(); });
 addEventListener('error', e=>{ const d=document.createElement('div'); d.style.cssText='position:fixed;top:60px;left:10px;right:10px;background:#900;color:#fff;padding:10px;font:12px monospace;z-index:99;white-space:pre-wrap'; d.textContent='Error: '+e.message+' @'+e.lineno; document.body.appendChild(d); });
 const standalone = matchMedia('(display-mode: standalone)').matches || navigator.standalone;
@@ -247,7 +253,7 @@ function showOverlay(html){
   const pb = overlay.querySelector('#party'); if (pb) pb.onclick = ()=>{ Sound.play('tap'); showParty(); };
   overlay.classList.add('show'); overlay.inert = false; document.body.classList.add('menu'); layoutTop();
   boostBtn.style.display='none'; pauseBtn.hidden = true; stick.style.visibility='hidden';
-  Sound.music('menu');
+  Sound.intensity(0); Sound.music('menu');
 }
 function hideOverlay(){
   // inert + blur so the just-clicked Play button can't be re-triggered by Space/Enter during play
@@ -797,7 +803,7 @@ function update(){
   if (player.len !== lastLen){ if (player.len > lastLen) lenPop(); lastLen = player.len; lenEl.textContent = player.len; }
   if (score !== lastScore){ lastScore = score; scoreEl.textContent = score; }
   renderBuffs();
-  if (tick%30===0) layoutTop();   // a longer score or a new buff pill can wrap the HUD onto another row
+  if (tick%30===0){ layoutTop(); Sound.intensity(frenzy && frenzy.live ? 1 : 0); }   // the HUD can wrap; the music picks up in a frenzy
 }
 
 function drawFood(f){
@@ -1242,7 +1248,7 @@ function guestFrame(){
     showTimer(cur.L);
   }
   trail(); renderBuffs(); FX.update();
-  if (tick%30===0) layoutTop();
+  if (tick%30===0){ layoutTop(); Sound.intensity(frenzy && frenzy.live ? 1 : 0); }
 }
 addEventListener('resize', ()=>{ if (guest && guest.on) Net.toHost({ k:'view', w: innerWidth, h: innerHeight }); });
 

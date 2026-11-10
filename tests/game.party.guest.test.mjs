@@ -8,7 +8,7 @@ import { installDom } from './dom-stub.mjs';
 // the respawn countdown, the end-of-match standings, and the host leaving.
 const html = fs.readFileSync(new URL('../index.html', import.meta.url), 'utf8');
 const dom = installDom({ html: html.slice(html.indexOf('<body>') + 6, html.indexOf('<script')) });
-for (const f of ['audio.js', 'fx.js', 'items.js', 'rules.js', 'sync.js', 'game.js']) loadScript(f);
+for (const f of ['songs.js', 'audio.js', 'fx.js', 'items.js', 'rules.js', 'sync.js', 'game.js']) loadScript(f);
 const D = globalThis.NoodleDebug, S = globalThis.Sync, FX = globalThis.FX;
 const ov = () => dom.el('overlay');
 

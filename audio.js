@@ -3,7 +3,7 @@
 (() => {
   const G = typeof window !== 'undefined' ? window : globalThis;
   const AC = G.AudioContext || G.webkitAudioContext;
-  const MUSIC_LEVEL = 0.13, SFX_LEVEL = 0.8;   // music ≈ -18 dB under sfx
+  const MUSIC_LEVEL = 0.11, SFX_LEVEL = 0.8;   // music sits well under the sound effects
   let ac = null, master = null, sfxBus = null, musicBus = null;
   let muted = false, boostNodes = null, music = null, mode = 'off', pendingMode = null;
   const recentEats = [];
@@ -101,53 +101,141 @@
     }
   }
 
-  // ---- music: generative pad per mode ---------------------------------------
-  const MODES = {
-    menu: { root: 110,  filter: 600,  pluck: [3, 6], scale: [0, 2, 4, 7, 9],  bpm: 0,  wind: 0 },
-    play: { root: 110,  filter: 1200, pluck: [2, 4], scale: [0, 2, 4, 7, 9],  bpm: 70, wind: 0 },
-    king: { root: 73.4, filter: 900,  pluck: [2, 4], scale: [0, 2, 3, 7, 8],  bpm: 90, wind: 0.12 },
+  // ---- music: a step sequencer playing the songs in songs.js -----------------
+  // A timer wakes every 25 ms and schedules the notes due in the next 150 ms on the audio clock, so timing stays
+  // tight even when the main thread is busy. Instruments are tiny synth voices built per note.
+  const LOOKAHEAD = 0.15, TICK_MS = 25;
+  let musicOn = true, hot = false;   // hot: frenzy — a touch faster, with an arpeggio and busier hats
+  const noiseBufs = new WeakMap();
+  function noiseFor(ctx) {
+    if (ctx === ac) return noiseBuffer();
+    if (!noiseBufs.has(ctx)) { const b = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate), d = b.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1; noiseBufs.set(ctx, b); }
+    return noiseBufs.get(ctx);
+  }
+  const hz = n => 440 * Math.pow(2, (n - 69) / 12);
+  // shape: quick attack to peak, settle to sustain, release at the end of the note
+  function adsr(g, t, peak, dur, sustain = 0.6, rel = 0.05) {
+    g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(peak, t + 0.012);
+    g.gain.setTargetAtTime(peak * sustain, t + 0.02, 0.08); g.gain.setTargetAtTime(0.0001, t + Math.max(0.03, dur * 0.92), rel);
+  }
+  const V = {
+    lead(ctx, out, t, n, dur, v) {
+      const o = ctx.createOscillator(), g = ctx.createGain(), f = ctx.createBiquadFilter();
+      o.type = v.lead; o.frequency.setValueAtTime(hz(n), t); f.type = 'lowpass'; f.frequency.value = v.leadCut;
+      if (dur > 0.3) {   // a little vibrato on held notes
+        const l = ctx.createOscillator(), lg = ctx.createGain(); l.frequency.value = 5.5;
+        lg.gain.setValueAtTime(0, t); lg.gain.linearRampToValueAtTime(hz(n) * 0.007, t + 0.3);
+        l.connect(lg).connect(o.frequency); l.start(t); l.stop(t + dur + 0.3);
+      }
+      adsr(g, t, v.leadGain, dur); o.connect(f).connect(g).connect(out); o.start(t); o.stop(t + dur + 0.3);
+    },
+    bass(ctx, out, t, n, dur, v) {
+      const o = ctx.createOscillator(), sub = ctx.createOscillator(), g = ctx.createGain(), f = ctx.createBiquadFilter();
+      o.type = 'sawtooth'; sub.type = 'sine'; o.frequency.value = hz(n); sub.frequency.value = hz(n);
+      f.type = 'lowpass'; f.Q.value = 4; f.frequency.setValueAtTime(900, t); f.frequency.exponentialRampToValueAtTime(240, t + Math.min(dur, 0.25));
+      adsr(g, t, v.bassGain, dur, 0.7, 0.03); o.connect(f); sub.connect(f); f.connect(g).connect(out);
+      o.start(t); sub.start(t); o.stop(t + dur + 0.2); sub.stop(t + dur + 0.2);
+    },
+    pad(ctx, out, t, n, dur, v) {
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(v.padGain, t + Math.min(0.25, dur * 0.4)); g.gain.setTargetAtTime(0.0001, t + dur * 0.9, 0.12);
+      g.connect(out);
+      for (const det of [-7, 7]) { const o = ctx.createOscillator(); o.type = 'triangle'; o.frequency.value = hz(n); o.detune.value = det; o.connect(g); o.start(t); o.stop(t + dur + 0.6); }
+    },
+    arp(ctx, out, t, n, dur) {
+      const o = ctx.createOscillator(), g = ctx.createGain(); o.type = 'square'; o.frequency.value = hz(n);
+      g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(0.045, t + 0.005); g.gain.exponentialRampToValueAtTime(0.0001, t + dur * 0.9);
+      o.connect(g).connect(out); o.start(t); o.stop(t + dur);
+    },
+    kick(ctx, out, t, lvl) {
+      const o = ctx.createOscillator(), g = ctx.createGain(); o.type = 'sine';
+      o.frequency.setValueAtTime(150, t); o.frequency.exponentialRampToValueAtTime(42, t + 0.12);
+      g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(0.9 * lvl, t + 0.004); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.28);
+      o.connect(g).connect(out); o.start(t); o.stop(t + 0.3);
+    },
+    snare(ctx, out, t, lvl) {
+      const s = ctx.createBufferSource(), f = ctx.createBiquadFilter(), g = ctx.createGain();
+      s.buffer = noiseFor(ctx); f.type = 'bandpass'; f.frequency.value = 1900; f.Q.value = 0.8;
+      g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(0.42 * lvl, t + 0.003); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.16);
+      s.connect(f).connect(g).connect(out); s.start(t); s.stop(t + 0.18);
+      const o = ctx.createOscillator(), og = ctx.createGain(); o.type = 'triangle'; o.frequency.setValueAtTime(210, t); o.frequency.exponentialRampToValueAtTime(140, t + 0.08);
+      og.gain.setValueAtTime(0.0001, t); og.gain.linearRampToValueAtTime(0.25 * lvl, t + 0.003); og.gain.exponentialRampToValueAtTime(0.0001, t + 0.1);
+      o.connect(og).connect(out); o.start(t); o.stop(t + 0.12);
+    },
+    hat(ctx, out, t, lvl) {
+      const s = ctx.createBufferSource(), f = ctx.createBiquadFilter(), g = ctx.createGain();
+      s.buffer = noiseFor(ctx); f.type = 'highpass'; f.frequency.value = 7500;
+      g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(0.16 * lvl, t + 0.002); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.04);
+      s.connect(f).connect(g).connect(out); s.start(t); s.stop(t + 0.05);
+    },
   };
+  const stepDur = (song, isHot) => 60 / song.bpm / 4 / (isHot ? 1.06 : 1);
+  // play everything due on one 16th-note step
+  function playStep(ctx, out, song, step, t, d, isHot) {
+    const v = song.voice; let e;
+    if ((e = song.lead[step])) V.lead(ctx, out, t, e.value, e.len * d, v);
+    if ((e = song.bass[step])) V.bass(ctx, out, t, e.value, e.len * d, v);
+    if ((e = song.pad[step])) for (const n of e.value) V.pad(ctx, out, t, n, e.len * d, v);
+    if (song.kick(step)) V.kick(ctx, out, t, v.drums);
+    if (song.snare(step)) V.snare(ctx, out, t, v.drums);
+    if (song.hat(step) || (isHot && step % 2 === 1)) V.hat(ctx, out, t, v.drums);
+    if (isHot) { const tones = song.chordTones(step); V.arp(ctx, out, t, 72 + tones[step % tones.length] + (step % 8 >= 4 ? 12 : 0), d); }
+  }
   function startMusic(m) {
-    const p = MODES[m], t = now();
-    const g = ac.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(1, t + 1); g.connect(musicBus);
-    const f = ac.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = p.filter; f.Q.value = 1.5; f.connect(g);
-    const lfo = ac.createOscillator(), lg = ac.createGain(); lfo.frequency.value = 0.08; lg.gain.value = p.filter * 0.4; lfo.connect(lg).connect(f.frequency); lfo.start();
-    const drones = [0, 4].map(det => { const o = ac.createOscillator(); o.type = 'triangle'; o.frequency.value = p.root; o.detune.value = det; o.connect(f); o.start(); return o; });
-    const nodes = [...drones, lfo], timers = [];
-    const alive = () => music && music.m === m;
-    // while the context is suspended (backgrounded tab) keep the clock running but schedule nothing,
-    // otherwise every skipped note would pile up at t=0 and fire together on resume
-    const live = () => ac.state === 'running';
-    const pluck = () => {
-      if (!alive()) return;
-      if (live()) { const deg = p.scale[Math.random() * p.scale.length | 0]; osc('triangle', p.root * 2 * Math.pow(2, deg / 12) * (Math.random() < 0.3 ? 2 : 1), now(), 0.8, g, 0.35, { a: 0.01 }); }
-      timers.push(setTimeout(pluck, (p.pluck[0] + Math.random() * (p.pluck[1] - p.pluck[0])) * 1000));
-    };
-    timers.push(setTimeout(pluck, 800));
-    if (p.bpm) {
-      const beat = () => { if (!alive()) return; if (live()) osc('sine', p.root / 2, now(), 0.18, g, 0.5); timers.push(setTimeout(beat, 60000 / p.bpm)); };
-      timers.push(setTimeout(beat, 200));
+    const song = G.Songs && G.Songs.get(m); if (!song) return null;
+    const t = now(), g = ac.createGain();
+    g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(1, t + 0.6); g.connect(musicBus);
+    const mu = { m, g, song, step: 0, next: t + 0.06, alive: true, timer: null };
+    mu.timer = setInterval(() => pump(mu), TICK_MS);
+    pump(mu);
+    return mu;
+  }
+  function pump(mu) {
+    if (!mu.alive) return;
+    // while the context is suspended (backgrounded tab) keep the clock but schedule nothing, otherwise every
+    // missed note would pile up and fire together on resume
+    if (ac.state !== 'running') { mu.next = now() + 0.06; return; }
+    const t = now();
+    if (mu.next < t - 0.1) mu.next = t + 0.02;   // the timer was throttled: skip ahead rather than burst
+    while (mu.next < t + LOOKAHEAD) {
+      const d = stepDur(mu.song, hot);
+      playStep(ac, mu.g, mu.song, mu.step, mu.next + (mu.step % 2 ? mu.song.swing * d : 0), d, hot);
+      mu.next += d; mu.step = (mu.step + 1) % mu.song.total;
     }
-    if (p.wind) {
-      const s = ac.createBufferSource(), bf = ac.createBiquadFilter(), wg = ac.createGain();
-      s.buffer = noiseBuffer(); s.loop = true; bf.type = 'bandpass'; bf.frequency.value = 400; bf.Q.value = 0.7; wg.gain.value = p.wind;
-      s.connect(bf).connect(wg).connect(g); s.start(); nodes.push(s);
-    }
-    return { m, g, nodes, timers };
   }
   function stopMusic(mu, fade) {
+    mu.alive = false; clearInterval(mu.timer);
     const t = now();
     mu.g.gain.cancelScheduledValues(t); mu.g.gain.setValueAtTime(mu.g.gain.value, t); mu.g.gain.linearRampToValueAtTime(0.0001, t + fade);
-    mu.nodes.forEach(n => n.stop(t + fade + 0.1));
-    mu.timers.forEach(clearTimeout);
+    setTimeout(() => { try { mu.g.disconnect(); } catch (e) {} }, (fade + 0.4) * 1000);
   }
   function setMusic(m) {
     if (m === mode) return;
     mode = m;
     if (!ac) { pendingMode = m; return; }
     const old = music;
-    music = m === 'off' ? null : startMusic(m);
-    if (old) stopMusic(old, m === 'off' ? 0.6 : 1);
+    music = m === 'off' || !musicOn ? null : startMusic(m);
+    if (old) stopMusic(old, m === 'off' ? 0.6 : 0.8);
+  }
+  // the music switch, separate from the master mute
+  function setMusicOn(b) {
+    musicOn = !!b;
+    if (!ac) return;
+    if (!musicOn && music) { stopMusic(music, 0.4); music = null; }
+    else if (musicOn && !music && mode !== 'off') music = startMusic(mode);
+  }
+  // render a song offline (for previews and tests): resolves with an AudioBuffer
+  function renderSong(m, seconds, o = {}) {
+    const OAC = G.OfflineAudioContext || G.webkitOfflineAudioContext, song = G.Songs && G.Songs.get(m);
+    if (!OAC || !song) return Promise.reject(new Error('cannot render ' + m));
+    const rate = o.rate || 22050, ctx = new OAC(1, Math.ceil(seconds * rate), rate), out = ctx.createGain();
+    out.gain.value = o.gain || 0.5; out.connect(ctx.destination);
+    for (let t = 0.05, step = 0; t < seconds; step = (step + 1) % song.total) {
+      const d = stepDur(song, o.hot);
+      playStep(ctx, out, song, step, t + (step % 2 ? song.swing * d : 0), d, o.hot);
+      t += d;
+    }
+    return ctx.startRendering();
   }
 
   function unlock() {
@@ -172,10 +260,14 @@
   }
 
   G.Sound = {
-    unlock, wake, boost, setMuted,
+    unlock, wake, boost, setMuted, setMusicOn,
     play(name, arg) { if (canPlay() && SFX[name]) SFX[name](arg); },
     music: setMusic,
+    // frenzy: the music picks up a little (tempo +6%, an arpeggio, busier hats) until it ends
+    intensity(level) { hot = level > 0; },
     get muted() { return muted; },
-    _state() { return { unlocked: !!ac, mode, boosting: !!boostNodes, ctx: ac }; },
+    get musicOn() { return musicOn; },
+    _render: renderSong,
+    _state() { return { unlocked: !!ac, mode, boosting: !!boostNodes, ctx: ac, music: music && { m: music.m, step: music.step, song: music.song.name }, hot }; },
   };
 })();

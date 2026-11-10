@@ -9,6 +9,7 @@ const html = fs.readFileSync(new URL('../index.html', import.meta.url), 'utf8');
 const body = html.slice(html.indexOf('<body>') + 6, html.indexOf('<script'));
 
 const dom = installDom({ html: body });
+loadScript('songs.js');
 loadScript('audio.js');
 loadScript('fx.js');
 loadScript('items.js');
