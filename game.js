@@ -28,7 +28,16 @@ function renderBuffs(force){
 const overlay = document.getElementById('overlay'), boostBtn = document.getElementById('boost');
 let W, H, DPR;
 function resize(){ DPR = Math.min(devicePixelRatio||1, 1.5); W = innerWidth; H = innerHeight; cv.width = W*DPR; cv.height = H*DPR; ctx.setTransform(DPR,0,0,DPR,0,0); }
-addEventListener('resize', resize); resize();
+addEventListener('resize', ()=>{ resize(); layoutTop(); }); resize();
+// the HUD wraps to one, two or three rows depending on width and the safe-area insets, so the boss bar and the big
+// banners are placed under wherever it actually ends rather than at a fixed offset
+let hudBottom = -1;
+function layoutTop(){
+  const hud = document.getElementById('hud'), boss = document.getElementById('boss'); if (!hud || !boss) return;
+  const hb = Math.round(hud.getBoundingClientRect().bottom);
+  if (hb !== hudBottom){ hudBottom = hb; boss.style.top = (hb + 6) + 'px'; }
+  FX.bannerTop = boss.hidden ? hb + 8 : Math.round(boss.getBoundingClientRect().bottom) + 10;
+}
 
 const ARENA = 2200, SEG = 6, BASE_SPEED = 2.6, PALETTE = ['#ff5d4a','#5cc8ff','#ffb347','#e07bff','#7dffb0','#fff275'];
 let best = +store.get('noodleBest') || 0; bestEl.textContent = best;
@@ -361,7 +370,7 @@ function reset(){
   goalEl.textContent = R.king ? ' — bonk the King' : R.target ? ' / '+R.target+' and biggest' : R.daily ? ' — '+daily.mod.name : ' — survive'; goalEl.classList.remove('met');
   roundNumEl.textContent = mode==='rounds' ? round+1 : mode==='daily' ? '📅' : '♾'; roundNameEl.textContent = mode==='rounds' ? R.name : R.name.replace('Daily · ','');
   timerEl.hidden = mode!=='daily'; timerEl.textContent = fmtTime(Rules.DAILY_FRAMES);
-  bossEl.hidden = !king; renderBoss();
+  bossEl.hidden = !king; renderBoss(); layoutTop();
   lastLen = player.len; lenEl.textContent = player.len; scoreEl.textContent = 0;
 }
 function renderBoss(){
@@ -686,6 +695,7 @@ function update(){
   if (player.len !== lastLen){ if (player.len > lastLen) lenPop(); lastLen = player.len; lenEl.textContent = player.len; }
   if (score !== lastScore){ lastScore = score; scoreEl.textContent = score; }
   renderBuffs();
+  if (tick%30===0) layoutTop();   // a longer score or a new buff pill can wrap the HUD onto another row
 }
 
 function drawFood(f){

@@ -6,7 +6,8 @@
   #hud { position:fixed; z-index:6; top:env(safe-area-inset-top, 0); left:0; right:0; padding:10px calc(14px + env(safe-area-inset-right, 0)) 10px calc(14px + env(safe-area-inset-left, 0)); display:flex; flex-wrap:wrap; align-items:center; gap:4px 12px; pointer-events:none; font-weight:700; font-size:16px; text-shadow:0 1px 3px rgba(0,0,0,.6); }
   #hud > div { white-space:nowrap; }
   #hud .btns { display:flex; gap:8px; margin-left:auto; }
-  .hudBtn { pointer-events:auto; width:36px; height:36px; border-radius:18px; border:0; background:rgba(255,255,255,.14); color:var(--paper); font-size:17px; line-height:36px; text-align:center; text-shadow:none; }
+  /* 44×44: Apple's minimum comfortable tap target */
+  .hudBtn { pointer-events:auto; width:44px; height:44px; border-radius:22px; border:0; background:rgba(255,255,255,.14); color:var(--paper); font-size:19px; line-height:44px; text-align:center; text-shadow:none; }
   .hudBtn:active { transform:translateY(1px); background:rgba(255,255,255,.22); }
   #buffs { display:flex; gap:6px; }
   .buff { position:relative; width:30px; height:30px; border-radius:10px; background:rgba(255,255,255,.14); display:flex; align-items:center; justify-content:center; font-size:16px; overflow:hidden; }
@@ -71,7 +72,7 @@
   #overlay .rd.sel { background:var(--sky); color:var(--ink); }
   .rd .md { position:absolute; right:-6px; bottom:-6px; font-size:16px; font-style:normal; }
   .tabs { display:flex; gap:6px; justify-content:center; margin:0 0 12px; }
-  #overlay .tabs .tab { background:transparent; color:var(--paper); border:2px solid rgba(255,255,255,.25); border-radius:14px; padding:5px 12px; font-size:13px; font-weight:700; }
+  #overlay .tabs .tab { background:transparent; color:var(--paper); border:2px solid rgba(255,255,255,.25); border-radius:20px; min-height:40px; padding:8px 14px; font-size:14px; font-weight:700; }
   #overlay .tabs .tab.sel { background:var(--sky); border-color:var(--sky); color:var(--ink); }
   .sk.cos { display:flex; align-items:center; justify-content:center; }
   .sk.cos i { font-style:normal; font-size:30px; }

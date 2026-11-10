@@ -4,6 +4,7 @@
   const CAP = 400, SCREEN_CAP = 120, TEXT_CAP = 24;
   const parts = [], screenParts = [], texts = [];
   const banner = { text: '', color: '#fff', t: 0, T: 0, sub: '' };
+  // where the banner's text baseline may start (screen px); the game sets it just below the HUD / boss bar
   const shake = { t: 0, T: 0, mag: 0 };
   const flash = { color: null, t: 0 };
   function rnd(a, b) { return a + Math.random() * (b - a); }
@@ -62,7 +63,7 @@
     },
     // one big screen-space banner at a time ("TRIPLE NOODLE!"); a new one replaces the old
     banner(str, color = '#fff', frames = 90, sub = '') { if (!FX.enabled) return; banner.text = str; banner.color = color; banner.t = banner.T = frames; banner.sub = sub; },
-    texts, _banner: banner,
+    texts, _banner: banner, bannerTop: null,
     update() {
       step(parts); step(screenParts);
       for (let i = texts.length - 1; i >= 0; i--) { const t = texts[i]; t.y += t.vy; if (--t.life <= 0) texts.splice(i, 1); }
@@ -85,8 +86,10 @@
       if (banner.t > 0) {
         // pop in over 8 frames, fade over the last 20
         const age = banner.T - banner.t, k = Math.min(1, age / 8), s = 0.6 + 0.4 * k + 0.12 * Math.sin(Math.min(1, age / 12) * Math.PI);
-        const size = Math.min(44, W / 11);
-        ctx.save(); ctx.globalAlpha = Math.min(1, banner.t / 20); ctx.translate(W / 2, H * 0.3); ctx.scale(s, s);
+        const size = Math.min(44, W / 11, H / 10);
+        // below the HUD when the game says where that ends, else 30% down; never lower than 40% (keeps it off the action)
+        const y = FX.bannerTop != null ? Math.min(H * 0.4, FX.bannerTop + size) : H * 0.3;
+        ctx.save(); ctx.globalAlpha = Math.min(1, banner.t / 20); ctx.translate(W / 2, y); ctx.scale(s, s);
         ctx.textAlign = 'center'; ctx.font = `900 ${size}px sans-serif`;
         ctx.fillStyle = 'rgba(0,0,0,.55)'; ctx.fillText(banner.text, 2, 3);
         ctx.fillStyle = banner.color; ctx.fillText(banner.text, 0, 0);
