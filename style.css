@@ -77,6 +77,27 @@
   .sk.cos { display:flex; align-items:center; justify-content:center; }
   .sk.cos i { font-style:normal; font-size:30px; }
 
+  /* party */
+  #board { display:flex; gap:10px; font-size:13px; font-weight:700; }
+  #board[hidden] { display:none; }
+  #board span { opacity:.8; }
+  #board span.me { opacity:1; color:var(--lime); }
+  #overlay h1 .code { display:inline; font-size:inherit; color:var(--sky); letter-spacing:4px; margin:0; }
+  #overlay .field { display:flex; flex-direction:column; align-items:center; gap:6px; font-size:13px; opacity:.9; margin:0 0 16px; }
+  #overlay input { font:inherit; font-size:18px; font-weight:700; text-align:center; color:var(--ink); background:var(--paper); border:0; border-radius:14px; padding:10px 14px; width:220px; user-select:text; -webkit-user-select:text; }
+  #overlay .joinRow { display:flex; gap:8px; margin:18px 0 6px; }
+  #overlay .joinRow input { width:130px; letter-spacing:6px; text-transform:uppercase; }
+  #overlay .joinRow button { width:auto; padding:10px 22px; }
+  #overlay .err { color:var(--coral); font-weight:700; margin:10px 0; }
+  #roundWord[hidden] { display:none; }
+  .lobby { list-style:none; display:flex; flex-direction:column; gap:6px; margin:22px 0 22px; font-size:18px; font-weight:700; }
+  .standings { list-style:none; width:100%; max-width:320px; margin:18px 0 24px; text-align:left; }
+  .standings li { display:grid; grid-template-columns:34px 1fr auto; align-items:baseline; gap:2px 8px; padding:8px 12px; border-radius:12px; }
+  .standings li.me { background:rgba(201,242,74,.14); }
+  .standings li span { font-weight:700; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .standings li em { font-style:normal; font-weight:800; color:var(--sky); }
+  .standings li small { grid-column:2 / 4; font-size:11px; opacity:.7; }
+
   /* landscape phones: keep this block LAST — a media query adds no specificity, so it must come after the
      base #overlay/#skins rules above to win the cascade */
   @media (orientation: landscape) and (max-height: 500px) {

@@ -13,6 +13,7 @@ loadScript('audio.js');
 loadScript('fx.js');
 loadScript('items.js');
 loadScript('rules.js');
+loadScript('sync.js');
 loadScript('game.js');
 
 // power-up tests aren't about collisions: move every rival far away so a wandering hunter can't spend the
