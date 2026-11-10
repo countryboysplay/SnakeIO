@@ -1,5 +1,5 @@
 // Noodle Pit service worker — caches the game so it runs offline.
-const CACHE = 'noodle-pit-v6';
+const CACHE = 'noodle-pit-v7';
 const ASSETS = ['./', './index.html', './style.css', './audio.js', './fx.js', './items.js', './rules.js', './sync.js', './net.js', './vendor/peerjs.min.js', './game.js', './manifest.webmanifest', './icon-192.png', './icon-512.png', './icon-512-maskable.png', './apple-touch-icon.png'];
 
 self.addEventListener('install', e => {

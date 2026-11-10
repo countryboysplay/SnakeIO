@@ -18,7 +18,7 @@ function parseAttrs(str) {
 }
 export function makeElement(tag = 'div', attrs = {}) {
   const el = {
-    tag, id: attrs.id || '', className: attrs.class || '', dataset: {}, style: {}, children: [], listeners: {},
+    tag, id: attrs.id || '', className: attrs.class || '', dataset: {}, style: { setProperty(k, v) { this[k] = v; } }, children: [], listeners: {},
     textContent: '', hidden: false, offsetWidth: 0, onclick: null, width: 0, height: 0,
     _innerHTML: '',
     get innerHTML() { return this._innerHTML; },
@@ -62,6 +62,7 @@ export function installDom({ html = '', width = 390, height = 844 } = {}) {
   globalThis.window = globalThis;
   globalThis.document = {
     body,
+    documentElement: makeElement('html'),
     getElementById: (id) => registry.get(id) || null,
     createElement: (tag) => makeElement(tag),
     addEventListener: (t, fn) => { (winListeners[t] ||= []).push(fn); },
